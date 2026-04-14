@@ -11,7 +11,6 @@ interface HandProps {
 export default function Hand({ cards, onPlay, isMyTurn, canPlayCards }: HandProps) {
   if (cards.length === 0) return null
 
-  // On mobile, tighter overlap. On desktop, more spread.
   const overlapClass = cards.length > 10
     ? '-ml-8 sm:-ml-6 first:ml-0'
     : cards.length > 6
@@ -28,7 +27,8 @@ export default function Hand({ cards, onPlay, isMyTurn, canPlayCards }: HandProp
               <Card
                 card={card}
                 onClick={() => playable && onPlay(card.id)}
-                disabled={!playable}
+                dimmed={!playable}
+                disabled={!isMyTurn}
               />
             </div>
           )

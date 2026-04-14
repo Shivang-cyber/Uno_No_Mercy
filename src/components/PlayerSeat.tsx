@@ -15,37 +15,51 @@ export default function PlayerSeat({
   return (
     <div
       className={`
-        flex flex-col items-center p-2 sm:p-3 rounded-xl min-w-[70px] sm:min-w-[90px] transition-all
-        ${isCurrentTurn ? 'bg-yellow-500/20 ring-2 ring-yellow-400' : 'bg-gray-800/60'}
+        flex flex-col items-center p-1.5 sm:p-2.5 rounded-xl transition-all
+        min-w-[60px] sm:min-w-[80px] max-w-[90px] sm:max-w-[110px]
+        ${isCurrentTurn ? 'bg-yellow-500/20 ring-2 ring-yellow-400 scale-110' : 'bg-gray-800/70'}
         ${!player.connected ? 'opacity-50' : ''}
-        ${player.isEliminated ? 'opacity-30 line-through' : ''}
+        ${player.isEliminated ? 'opacity-30' : ''}
         ${isSelf ? 'ring-1 ring-cyan-400' : ''}
       `}
     >
-      <div className="text-xs sm:text-sm font-bold truncate max-w-[80px]">
-        {player.name}{isSelf ? ' (You)' : ''}
+      <div className={`text-[10px] sm:text-xs font-bold truncate max-w-[70px] sm:max-w-[90px] ${isSelf ? 'text-cyan-300' : ''}`}>
+        {player.name}
       </div>
-      <div className="text-lg sm:text-2xl font-bold mt-1">
+
+      {/* Card count — big and visible */}
+      <div className={`text-xl sm:text-2xl font-black mt-0.5 ${
+        player.isEliminated ? 'text-red-500' :
+        player.cardCount === 1 ? 'text-red-400 animate-pulse' :
+        player.cardCount <= 3 ? 'text-yellow-400' :
+        'text-white'
+      }`}>
         {player.isEliminated ? 'X' : player.cardCount}
       </div>
-      <div className="text-[10px] sm:text-xs text-gray-400">
-        {player.isEliminated ? 'Out' : `card${player.cardCount !== 1 ? 's' : ''}`}
+
+      <div className="text-[8px] sm:text-[10px] text-gray-500">
+        {player.isEliminated ? 'OUT' : player.cardCount === 1 ? 'UNO!' : 'cards'}
       </div>
+
       {!player.connected && (
-        <div className="text-[10px] text-yellow-400 mt-1">Reconnecting...</div>
+        <div className="text-[8px] text-yellow-400 mt-0.5">offline...</div>
       )}
-      {player.cardCount === 1 && !isSelf && onChallenge && (
+
+      {/* UNO challenge button — visible to other players when target has 1 card */}
+      {onChallenge && (
         <button
-          onClick={onChallenge}
-          className="mt-1 px-2 py-0.5 bg-red-600 rounded text-[10px] sm:text-xs font-bold hover:bg-red-500"
+          onClick={(e) => { e.stopPropagation(); onChallenge() }}
+          className="mt-1 px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-[9px] sm:text-[11px] font-black animate-pulse"
         >
-          UNO?
+          CATCH!
         </button>
       )}
-      {showSwapButton && !isSelf && !player.isEliminated && player.cardCount > 0 && (
+
+      {/* Swap pick button */}
+      {showSwapButton && onSwapPick && (
         <button
-          onClick={onSwapPick}
-          className="mt-1 px-2 py-0.5 bg-purple-600 rounded text-[10px] sm:text-xs font-bold hover:bg-purple-500"
+          onClick={(e) => { e.stopPropagation(); onSwapPick() }}
+          className="mt-1 px-2 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[9px] sm:text-[11px] font-bold"
         >
           Swap
         </button>

@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws'
 import type {
   GameState, Player, ClientMessage, ServerMessage, Color, Card,
 } from '../shared/types.js'
-import { initGame, playCard, handleDraw, handleSwapPick, handleRoulette, getPublicState } from './engine.js'
+import { initGame, playCard, handleDraw, handleSwapPick, handleRoulette, getPublicState, callUno, challengeUno } from './engine.js'
 
 const RECONNECT_TIMEOUT = 120_000 // 2 minutes
 const TURN_PAUSE_ON_DISCONNECT = 30_000 // 30 seconds
@@ -104,6 +104,7 @@ export class Room {
           isEliminated: false,
         })),
         topDiscard: null,
+        recentDiscard: [],
         activeColor: null,
         turnIndex: 0,
         direction: 1,
@@ -111,6 +112,8 @@ export class Room {
         deckCount: 0,
         winner: null,
         pendingSwapPlayerId: null,
+        unoCallable: [],
+        rouletteActive: false,
       },
     }
     this.broadcast(msg)
@@ -159,10 +162,10 @@ export class Room {
           }
         }
         this.broadcastState()
-        // Handle roulette: if wild_roulette was played, next player needs to pick color
-        if (this.state.discard[this.state.discard.length - 1]?.value === 'wild_roulette' && !this.state.rouletteTargetColor) {
-          const nextPlayer = this.state.players[this.state.turnIndex]
-          this.sendToPlayer(nextPlayer.id, { type: 'PICK_COLOR' })
+        // If roulette is now active, prompt the next player to pick a color
+        if (this.state.rouletteActive && !this.state.rouletteTargetColor) {
+          const target = this.state.players[this.state.turnIndex]
+          this.sendToPlayer(target.id, { type: 'PICK_ROULETTE_COLOR' })
         }
         break
       }
@@ -191,26 +194,32 @@ export class Room {
         break
       }
 
+      case 'ROULETTE_COLOR': {
+        if (!this.state || !this.state.rouletteActive) return
+        // The current player picks a color, then draws until they hit it
+        const target = this.state.players[this.state.turnIndex]
+        if (target.id !== conn.playerId) return
+        const { events: rEvents } = handleRoulette(this.state, target.id, msg.color)
+        for (const evt of rEvents) this.broadcast({ type: 'EVENT', event: evt })
+        this.broadcastState()
+        break
+      }
+
       case 'CALL_UNO': {
-        // UNO call — mark that this player called UNO
-        // Simple implementation: if player has 1 card and calls, they're safe
+        if (!this.state) return
+        const { ok, events } = callUno(this.state, conn.playerId)
+        if (ok) {
+          for (const evt of events) this.broadcast({ type: 'EVENT', event: evt })
+          this.broadcastState()
+        }
         break
       }
 
       case 'CHALLENGE_UNO': {
-        // If target has 1 card and didn't call UNO, they draw 2
         if (!this.state) return
-        const target = this.state.players.find(p => p.id === msg.targetId)
-        if (target && target.hand.length === 1) {
-          const drawn = []
-          for (let i = 0; i < 2; i++) {
-            if (this.state.deck.length > 0) {
-              const card = this.state.deck.pop()!
-              target.hand.push(card)
-              drawn.push(card)
-            }
-          }
-          this.broadcast({ type: 'EVENT', event: { event: 'uno_penalty', playerId: msg.targetId, cardsDrawn: drawn.length } })
+        const { ok: cOk, events: cEvents } = challengeUno(this.state, conn.playerId, msg.targetId)
+        if (cOk) {
+          for (const evt of cEvents) this.broadcast({ type: 'EVENT', event: evt })
           this.broadcastState()
         }
         break

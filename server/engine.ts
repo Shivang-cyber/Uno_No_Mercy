@@ -83,7 +83,9 @@ export function initGame(code: string, players: Pick<Player, 'id' | 'name'>[]): 
     winner: null,
     lastAction: null,
     rouletteTargetColor: null,
+    rouletteActive: false,
     pendingSwapPlayerId: null,
+    calledUno: new Set<string>(),
   }
 }
 
@@ -134,11 +136,17 @@ function checkMercy(state: GameState): GameEvent[] {
   const events: GameEvent[] = []
   for (const p of state.players) {
     if (p.hand.length >= MERCY_LIMIT) {
-      // Eliminated — shuffle hand back into deck
+      // Eliminated — set aside hand (PDF: "Set aside their hand until deck needs reshuffle")
       state.deck.push(...p.hand)
       p.hand = []
       state.deck = shuffle(state.deck)
       events.push({ event: 'eliminated', playerId: p.id })
+
+      // If it's the eliminated player's turn, advance past them
+      const elimIdx = state.players.indexOf(p)
+      if (state.turnIndex === elimIdx) {
+        state.turnIndex = nextAliveIndex(state, state.turnIndex)
+      }
     }
   }
   return events
@@ -187,8 +195,9 @@ export function playCard(
   const events: GameEvent[] = []
   const player = currentPlayer(state)
 
-  if (player.id !== playerId) return { ok: false, events: [{ event: 'card_played', playerId, card: null! }] }
+  if (player.id !== playerId) return { ok: false, events: [] }
   if (state.phase !== 'playing') return { ok: false, events: [] }
+  if (state.rouletteActive) return { ok: false, events: [] } // can't play cards during roulette
 
   const cardIdx = player.hand.findIndex(c => c.id === cardId)
   if (cardIdx === -1) return { ok: false, events: [] }
@@ -311,9 +320,9 @@ export function playCard(
 
     case 'wild_roulette': {
       // Next player must pick a color and draw until they hit it
-      // We need the next player to pick a color — server handles this
       advanceTurn(state)
-      state.rouletteTargetColor = null // will be set when target picks
+      state.rouletteActive = true      // lock out card playing
+      state.rouletteTargetColor = null  // will be set when target picks
       break
     }
 
@@ -345,28 +354,17 @@ export function handleDraw(state: GameState, playerId: string): { events: GameEv
     totalDraw = state.pendingDraw
     state.pendingDraw = 0
   } else {
-    // Draw until you get a playable card (No Mercy rule)
-    totalDraw = 0
-    let found = false
-    while (!found && (state.deck.length > 0 || state.discard.length > 1)) {
-      const drawn = drawCards(state, 1)
-      if (drawn.length === 0) break
+    // Standard UNO: draw exactly 1 card, turn ends
+    const drawn = drawCards(state, 1)
+    if (drawn.length > 0) {
       player.hand.push(drawn[0])
-      totalDraw++
-      // Check if this card is playable on the current discard
-      if (canPlay(drawn[0], { ...state, pendingDraw: 0 })) {
-        found = true
-      }
-      // Safety: cap at 50 to prevent infinite loops
-      if (totalDraw >= 50) break
     }
-    events.push({ event: 'cards_drawn', playerId, count: totalDraw })
-    // Check mercy
+    events.push({ event: 'cards_drawn', playerId, count: drawn.length })
     events.push(...checkMercy(state))
     const winEvt = checkWinner(state)
     if (winEvt) events.push(winEvt)
     advanceTurn(state)
-    return { events, drawnCards: player.hand.slice(-totalDraw) }
+    return { events, drawnCards: drawn }
   }
 
   // Forced draw (from stacking)
@@ -423,17 +421,55 @@ export function handleRoulette(state: GameState, targetId: string, chosenColor: 
     if (count >= 50) break // safety cap
   }
 
+  // Clear roulette state and advance turn
+  state.rouletteActive = false
+  state.rouletteTargetColor = null
+
   const events: GameEvent[] = [{ event: 'roulette', targetId, chosenColor, cardsDrawn: count }]
   events.push(...checkMercy(state))
   const winEvt = checkWinner(state)
   if (winEvt) events.push(winEvt)
 
+  advanceTurn(state)
   return { events }
+}
+
+// ── UNO call / challenge ─────────────────────────────────────────
+
+export function callUno(state: GameState, playerId: string): { ok: boolean; events: GameEvent[] } {
+  const player = state.players.find(p => p.id === playerId)
+  if (!player || player.hand.length !== 1) return { ok: false, events: [] }
+  state.calledUno.add(playerId)
+  return { ok: true, events: [{ event: 'uno_called', playerId }] }
+}
+
+export function challengeUno(state: GameState, challengerId: string, targetId: string): { ok: boolean; events: GameEvent[] } {
+  const target = state.players.find(p => p.id === targetId)
+  if (!target || target.hand.length !== 1) return { ok: false, events: [] }
+  // If target already called UNO, challenge fails
+  if (state.calledUno.has(targetId)) return { ok: false, events: [] }
+
+  // Target failed to call UNO — draw 2 penalty
+  const drawn = drawCards(state, 2)
+  target.hand.push(...drawn)
+  state.calledUno.delete(targetId) // reset
+
+  const events: GameEvent[] = [{ event: 'uno_penalty', playerId: targetId, cardsDrawn: drawn.length }]
+  events.push(...checkMercy(state))
+  return { ok: true, events }
 }
 
 // ── Utility: get public state ────────────────────────────────────
 
 export function getPublicState(state: GameState): import('../shared/types.js').PublicGameState {
+  // Players with 1 card who haven't called UNO — challengeable
+  const unoCallable = state.players
+    .filter(p => p.hand.length === 1 && !state.calledUno.has(p.id))
+    .map(p => p.id)
+
+  // Last 5 cards from discard
+  const recentDiscard = state.discard.slice(-5)
+
   return {
     code: state.code,
     phase: state.phase,
@@ -445,6 +481,7 @@ export function getPublicState(state: GameState): import('../shared/types.js').P
       isEliminated: p.hand.length === 0 && state.phase === 'playing' && state.winner !== p.id,
     })),
     topDiscard: state.discard[state.discard.length - 1] ?? null,
+    recentDiscard,
     activeColor: state.activeColor,
     turnIndex: state.turnIndex,
     direction: state.direction,
@@ -452,5 +489,7 @@ export function getPublicState(state: GameState): import('../shared/types.js').P
     deckCount: state.deck.length,
     winner: state.winner,
     pendingSwapPlayerId: state.pendingSwapPlayerId,
+    unoCallable,
+    rouletteActive: state.rouletteActive,
   }
 }
