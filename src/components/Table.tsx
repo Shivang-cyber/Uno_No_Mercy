@@ -5,7 +5,7 @@ import Card from './Card'
 import Hand from './Hand'
 import ColorPicker from './ColorPicker'
 
-// ── Direction arrow (clean circular SVG) ─────────────────────────
+// ── Direction arrow ──────────────────────────────────────────────
 
 function DirectionArrow({ direction, size = 200 }: { direction: 1 | -1; size?: number }) {
   const r = size * 0.42
@@ -50,25 +50,35 @@ function DirectionArrow({ direction, size = 200 }: { direction: 1 | -1; size?: n
   )
 }
 
-// ── Stacked discard pile (3 cards, fully opaque, fanned) ─────────
+// ── Stacked discard pile (fans out on hover) ─────────────────────
 
 function DiscardPile({ cards, activeColor }: { cards: CardType[]; activeColor: Color | null }) {
-  const show = cards.slice(-3) // only last 3
+  const [hovered, setHovered] = useState(false)
+  const show = cards.slice(-5)
   if (show.length === 0) return <div className="w-18 h-28 sm:w-22 sm:h-34 rounded-lg border-2 border-dashed border-gray-600" />
 
   return (
-    <div className="relative w-28 h-32 sm:w-34 sm:h-40">
+    <div
+      className="relative w-32 h-32 sm:w-36 sm:h-40 cursor-pointer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {show.map((card, i) => {
-        const xOff = (i - (show.length - 1)) * 8
-        const rotate = (i - (show.length - 1)) * 5
+        const baseX = (i - (show.length - 1)) * 8
+        const baseRot = (i - (show.length - 1)) * 5
+        // On hover: fan out wider
+        const hoverX = (i - (show.length - 1)) * 28
+        const hoverRot = (i - (show.length - 1)) * 12
+        const xOff = hovered ? hoverX : baseX
+        const rotate = hovered ? hoverRot : baseRot
         return (
           <div
             key={card.id}
-            className="absolute transition-all duration-300"
+            className="absolute transition-all duration-300 ease-out"
             style={{
               left: `calc(50% + ${xOff}px)`,
               top: '50%',
-              transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
+              transform: `translate(-50%, -50%) rotate(${rotate}deg) ${hovered ? 'scale(1.05)' : ''}`,
               zIndex: i,
             }}
           >
@@ -117,16 +127,14 @@ function DrawAnimation({ count, onDone }: { count: number; onDone: () => void })
   )
 }
 
-// ── Pass / Swap animation overlay ────────────────────────────────
+// ── Pass / Swap animations ───────────────────────────────────────
 
 function PassAnimation({ direction, onDone }: { direction: 1 | -1; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 1800); return () => clearTimeout(t) }, [onDone])
   return (
     <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
       <div className="bg-black/60 rounded-2xl px-8 py-5 backdrop-blur-sm flex flex-col items-center animate-fade-in">
-        <div className={`text-4xl mb-2 ${direction === 1 ? '' : 'scale-x-[-1]'}`}>
-          &#x21BB;
-        </div>
+        <div className={`text-4xl mb-2 ${direction === 1 ? '' : 'scale-x-[-1]'}`}>&#x21BB;</div>
         <div className="text-lg font-bold text-yellow-300">Hands passed {direction === 1 ? 'clockwise' : 'counter-clockwise'}!</div>
       </div>
     </div>
@@ -205,13 +213,12 @@ function Scoreboard({ players, scores }: {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      {/* Tab */}
       <div
         className="bg-gray-800/90 border border-gray-600 rounded-r-lg cursor-pointer"
         onClick={() => setOpen(!open)}
       >
         {!open && (
-          <div className="py-3 px-1 text-[10px] font-bold text-gray-400 writing-mode-vertical"
+          <div className="py-3 px-1 text-[10px] font-bold text-gray-400"
             style={{ writingMode: 'vertical-rl' }}>
             SCORE
           </div>
@@ -255,10 +262,9 @@ export default function Table() {
   const [drawAnim, setDrawAnim] = useState<{ count: number } | null>(null)
   const [passAnim, setPassAnim] = useState<{ direction: 1 | -1 } | null>(null)
   const [swapAnim, setSwapAnim] = useState<{ p1: string; p2: string } | null>(null)
-  const [scores] = useState<Record<string, number>>({}) // TODO: track across hands
+  const [scores] = useState<Record<string, number>>({})
   const events = useStore(s => s.events)
 
-  // Watch for events to trigger animations
   useEffect(() => {
     if (events.length === 0) return
     const last = events[events.length - 1]
@@ -292,8 +298,7 @@ export default function Table() {
   const iAmCallable = unoCallable.includes(playerId ?? '')
   const recentDiscard = gameState.recentDiscard ?? (gameState.topDiscard ? [gameState.topDiscard] : [])
 
-  // Arrange other players in turn order starting from the player after me (clockwise).
-  // This puts my "next" player to the left, wrapping around the top arc.
+  // Arrange other players in turn order starting from next after me
   const playerCount = gameState.players.length
   const orderedOthers: { id: string; name: string; cardCount: number; connected: boolean; isEliminated: boolean; originalIndex: number }[] = []
   for (let offset = 1; offset < playerCount; offset++) {
@@ -304,7 +309,7 @@ export default function Table() {
   const otherPlayers = orderedOthers
   const myPlayer = gameState.players[myIndex]
 
-  // During roulette, can't play any cards — must draw
+  // During roulette, can't play any cards
   const canPlayCards = new Set<string>()
   if (isMyTurn && !rouletteActive && hand.length > 0 && gameState.topDiscard) {
     for (const card of hand) {
@@ -312,15 +317,10 @@ export default function Table() {
     }
   }
 
-  // Distribute ALL players (including me) equally around 360°.
-  // "You" sits at the bottom (270° in standard math / 6 o'clock).
-  // Others fill the remaining slots clockwise from you.
-  // With N total players, each slot = 360/N degrees apart.
-  // otherPlayers[0] is next after me, so they get slot 1, etc.
+  // Equal spacing: 360° / totalPlayers, "you" at 270° (bottom)
   function getPlayerAngle(index: number, totalOthers: number): number {
-    const totalPlayers = totalOthers + 1 // +1 for me
+    const totalPlayers = totalOthers + 1
     const slotDeg = 360 / totalPlayers
-    // My position = 270° (bottom). Next player = 270 + slotDeg, etc.
     return 270 + slotDeg * (index + 1)
   }
 
@@ -417,8 +417,8 @@ export default function Table() {
         <>
           {/* Circular table */}
           <div className="flex-1 flex items-center justify-center px-2 py-1 sm:py-3">
-            <div className="relative w-[min(85vw,460px)] aspect-square">
-              {/* Visible circle border */}
+            <div className="relative w-[min(90vw,540px)] aspect-square">
+              {/* Visible circle */}
               <div className="absolute inset-[4%] rounded-full border-2 border-gray-600/40" />
 
               {/* Direction arrow */}
@@ -426,7 +426,7 @@ export default function Table() {
                 <DirectionArrow direction={gameState.direction} />
               </div>
 
-              {/* Other players on top arc */}
+              {/* Other players equally spaced */}
               {otherPlayers.map((p, i) => {
                 const angleDeg = getPlayerAngle(i, otherPlayers.length)
                 const rad = (angleDeg * Math.PI) / 180
@@ -451,7 +451,7 @@ export default function Table() {
               })}
 
               {/* Center: Draw + Discard */}
-              <div className="absolute inset-0 flex items-center justify-center gap-3 sm:gap-5">
+              <div className="absolute inset-0 flex items-center justify-center gap-8 sm:gap-12">
                 <button type="button" onClick={draw} disabled={!isMyTurn}
                   className={`
                     relative w-16 h-24 sm:w-20 sm:h-28 rounded-xl bg-gray-800 border-2
@@ -473,7 +473,7 @@ export default function Table() {
                 <DiscardPile cards={recentDiscard} activeColor={gameState.activeColor} />
               </div>
 
-              {/* "You" at bottom of circle */}
+              {/* "You" at bottom */}
               {myPlayer && (
                 <div className="absolute bottom-[6%] left-1/2 -translate-x-1/2 z-10">
                   <div className={`
@@ -488,7 +488,7 @@ export default function Table() {
           </div>
 
           {/* Turn indicator */}
-          <div className="text-center py-0.5 text-sm shrink-0">
+          <div className="text-center py-1 text-sm shrink-0 relative z-10 -mb-4">
             {isMyTurn ? (
               <span className="text-yellow-400 font-bold animate-pulse">
                 {isMyRoulette
@@ -501,7 +501,7 @@ export default function Table() {
           </div>
 
           {/* Hand + UNO */}
-          <div className="bg-gray-800/90 border-t border-gray-700 shrink-0">
+          <div className="shrink-0 relative z-30 overflow-visible">
             {(hand.length <= 2 && hand.length > 0 || iAmCallable) && (
               <div className="flex justify-center pt-2">
                 <button type="button" onClick={callUno}
