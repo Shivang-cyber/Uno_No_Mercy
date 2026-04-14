@@ -4,8 +4,7 @@ import type {
 } from '../shared/types.js'
 import { initGame, playCard, handleDraw, handleSwapPick, handleRoulette, getPublicState, callUno, challengeUno } from './engine.js'
 
-const RECONNECT_TIMEOUT = 120_000 // 2 minutes
-const TURN_PAUSE_ON_DISCONNECT = 30_000 // 30 seconds
+const RECONNECT_TIMEOUT = 120_000 // 2 minutes auto-kick
 
 interface Connection {
   ws: WebSocket
@@ -18,6 +17,7 @@ export class Room {
   state: GameState | null = null
   lobby: { id: string; name: string }[] = []
   disconnectTimers: Map<string, NodeJS.Timeout> = new Map()
+  kickVotes: Map<string, Set<string>> = new Map() // targetId -> set of voter playerIds
 
   constructor(code: string) {
     this.code = code
@@ -43,6 +43,25 @@ export class Room {
   private broadcastState() {
     if (!this.state) return
     const pub = getPublicState(this.state)
+
+    // Inject kick vote data
+    const kickVotes: Record<string, number> = {}
+    const kickNeeded: Record<string, number> = {}
+    const connectedAlive = this.state.players.filter(p => p.connected && p.hand.length > 0)
+    for (const [targetId, voters] of this.kickVotes) {
+      kickVotes[targetId] = voters.size
+      kickNeeded[targetId] = connectedAlive.filter(p => p.id !== targetId).length
+    }
+    // Also include offline players who haven't been voted on yet
+    for (const p of this.state.players) {
+      if (!p.connected && p.hand.length > 0 && !kickVotes[p.id]) {
+        kickVotes[p.id] = 0
+        kickNeeded[p.id] = connectedAlive.length
+      }
+    }
+    pub.kickVotes = kickVotes
+    pub.kickNeeded = kickNeeded
+
     this.broadcast({ type: 'STATE', state: pub })
     // Send each player their private hand
     for (const player of this.state.players) {
@@ -51,20 +70,32 @@ export class Room {
   }
 
   addPlayer(ws: WebSocket, name: string, rejoinToken?: string): string | null {
-    // Check for rejoin
+    // Check for rejoin during active game
     if (rejoinToken && this.state) {
       const player = this.state.players.find(p => p.id === rejoinToken)
       if (player) {
-        // Reconnect
         player.connected = true
         player.lastSeen = Date.now()
-        // Remove old connection
         this.connections = this.connections.filter(c => c.playerId !== rejoinToken)
         this.connections.push({ ws, playerId: rejoinToken })
-        // Clear disconnect timer
         const timer = this.disconnectTimers.get(rejoinToken)
         if (timer) { clearTimeout(timer); this.disconnectTimers.delete(rejoinToken) }
+        this.kickVotes.delete(rejoinToken)
         this.broadcastState()
+        return rejoinToken
+      }
+    }
+
+    // Check for rejoin during lobby — replace existing entry instead of adding duplicate
+    if (rejoinToken && !this.state) {
+      const existingIdx = this.lobby.findIndex(p => p.id === rejoinToken)
+      if (existingIdx !== -1) {
+        // Update name, replace connection
+        this.lobby[existingIdx].name = name
+        this.connections = this.connections.filter(c => c.playerId !== rejoinToken)
+        this.connections.push({ ws, playerId: rejoinToken })
+        this.send(ws, { type: 'JOINED', playerId: rejoinToken })
+        this.broadcastLobby()
         return rejoinToken
       }
     }
@@ -114,6 +145,8 @@ export class Room {
         pendingSwapPlayerId: null,
         unoCallable: [],
         rouletteActive: false,
+        kickVotes: {},
+        kickNeeded: {},
       },
     }
     this.broadcast(msg)
@@ -208,7 +241,66 @@ export class Room {
         }
         break
       }
+
+      case 'KICK_VOTE': {
+        if (!this.state) return
+        const target = this.state.players.find(p => p.id === msg.targetId)
+        if (!target || target.connected) return // can only kick offline players
+
+        if (!this.kickVotes.has(msg.targetId)) this.kickVotes.set(msg.targetId, new Set())
+        this.kickVotes.get(msg.targetId)!.add(conn.playerId)
+
+        // Check if all connected players (except target) have voted
+        const connectedOthers = this.state.players.filter(p => p.connected && p.id !== msg.targetId && p.hand.length > 0)
+        const votes = this.kickVotes.get(msg.targetId)!.size
+        if (votes >= connectedOthers.length) {
+          this.removePlayer(msg.targetId)
+          this.kickVotes.delete(msg.targetId)
+        } else {
+          this.broadcastState()
+        }
+        break
+      }
     }
+  }
+
+  private removePlayer(playerId: string) {
+    if (!this.state) return
+    const p = this.state.players.find(pp => pp.id === playerId)
+    if (!p || p.hand.length === 0) return
+
+    // Shuffle hand back into deck
+    this.state.deck.push(...p.hand)
+    p.hand = []
+
+    // If it was their turn, advance
+    const pIdx = this.state.players.indexOf(p)
+    if (this.state.turnIndex === pIdx) {
+      const n = this.state.players.length
+      let nextIdx = this.state.turnIndex
+      for (let i = 0; i < n; i++) {
+        nextIdx = ((nextIdx + this.state.direction) % n + n) % n
+        if (this.state.players[nextIdx].hand.length > 0) break
+      }
+      this.state.turnIndex = nextIdx
+    }
+
+    this.broadcast({ type: 'EVENT', event: { event: 'eliminated', playerId } })
+    this.broadcastState()
+
+    // Check if only 1 player left
+    const alive = this.state.players.filter(pp => pp.hand.length > 0)
+    if (alive.length <= 1 && alive[0]) {
+      this.state.winner = alive[0].id
+      this.state.phase = 'ended'
+      this.broadcast({ type: 'EVENT', event: { event: 'player_won', playerId: alive[0].id } })
+      this.broadcastState()
+    }
+
+    // Clear disconnect timer if any
+    const timer = this.disconnectTimers.get(playerId)
+    if (timer) { clearTimeout(timer); this.disconnectTimers.delete(playerId) }
+    this.kickVotes.delete(playerId)
   }
 
   handleDisconnect(ws: WebSocket) {
@@ -224,17 +316,13 @@ export class Room {
         player.lastSeen = Date.now()
         this.broadcastState()
 
-        // Set reconnect timeout
+        // Auto-kick after 2 minutes if still offline
         const timer = setTimeout(() => {
           if (!this.state) return
           const p = this.state.players.find(pp => pp.id === conn.playerId)
           if (p && !p.connected) {
-            // Remove player — shuffle hand back into deck
-            this.state.deck.push(...p.hand)
-            p.hand = []
-            this.broadcastState()
+            this.removePlayer(conn.playerId)
           }
-          this.disconnectTimers.delete(conn.playerId)
         }, RECONNECT_TIMEOUT)
         this.disconnectTimers.set(conn.playerId, timer)
       }

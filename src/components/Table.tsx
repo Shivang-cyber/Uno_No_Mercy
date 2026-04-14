@@ -158,10 +158,12 @@ function SwapAnimation({ p1, p2, onDone }: { p1: string; p2: string; onDone: () 
 function PlayerBubble({
   name, cardCount, isCurrentTurn, isSelf, connected, isEliminated,
   isCallable, onChallenge, showSwapButton, onSwapPick,
+  onKick, kickInfo,
 }: {
   name: string; cardCount: number; isCurrentTurn: boolean; isSelf: boolean
   connected: boolean; isEliminated: boolean; isCallable: boolean
   onChallenge?: () => void; showSwapButton?: boolean; onSwapPick?: () => void
+  onKick?: () => void; kickInfo?: { votes: number; needed: number }
 }) {
   return (
     <div className="flex flex-col items-center gap-0.5">
@@ -195,15 +197,22 @@ function PlayerBubble({
           Swap
         </button>
       )}
+      {!connected && !isEliminated && onKick && kickInfo && (
+        <button type="button" onClick={onKick}
+          className="mt-0.5 px-2 py-0.5 bg-orange-700 hover:bg-orange-600 rounded text-[9px] font-bold">
+          Kick ({kickInfo.votes}/{kickInfo.needed})
+        </button>
+      )}
     </div>
   )
 }
 
 // ── Scoreboard sidebar ───────────────────────────────────────────
 
-function Scoreboard({ players, scores }: {
+function Scoreboard({ players, scores, onLogout }: {
   players: { id: string; name: string; cardCount: number; isEliminated: boolean }[]
   scores: Record<string, number>
+  onLogout: () => void
 }) {
   const [open, setOpen] = useState(false)
 
@@ -243,6 +252,14 @@ function Scoreboard({ players, scores }: {
               <div>Knockout bonus: <b>250</b></div>
               <div className="mt-1 text-gray-400">First to <b>1000</b> wins!</div>
             </div>
+            <hr className="border-gray-600 my-2" />
+            <button
+              type="button"
+              onClick={onLogout}
+              className="w-full py-1.5 bg-red-800 hover:bg-red-700 rounded text-xs font-bold transition-colors"
+            >
+              Leave Game
+            </button>
           </div>
         )}
       </div>
@@ -255,7 +272,7 @@ function Scoreboard({ players, scores }: {
 export default function Table() {
   const {
     gameState, hand, playerId, playCard, draw, callUno, challengeUno,
-    pickSwapTarget, pickColor,
+    pickSwapTarget, pickColor, kickVote, logout,
     showColorPicker, showSwapPicker, startGame, error,
   } = useStore()
 
@@ -290,12 +307,14 @@ export default function Table() {
   const isPlaying = gameState.phase === 'playing'
   const isEnded = gameState.phase === 'ended'
   const isHost = gameState.players[0]?.id === playerId
-  const myIndex = gameState.players.findIndex(p => p.id === playerId)
+  // Use playerId from store, fall back to localStorage rejoinToken for mid-rejoin renders
+  const effectivePlayerId = playerId ?? localStorage.getItem('rejoinToken')
+  const myIndex = gameState.players.findIndex(p => p.id === effectivePlayerId)
   const isMyTurn = isPlaying && gameState.turnIndex === myIndex
   const rouletteActive = gameState.rouletteActive ?? false
   const isMyRoulette = isMyTurn && rouletteActive
   const unoCallable = gameState.unoCallable ?? []
-  const iAmCallable = unoCallable.includes(playerId ?? '')
+  const iAmCallable = unoCallable.includes(effectivePlayerId ?? '')
   const recentDiscard = gameState.recentDiscard ?? (gameState.topDiscard ? [gameState.topDiscard] : [])
 
   // Arrange other players in turn order starting from next after me
@@ -343,7 +362,7 @@ export default function Table() {
             <h3 className="text-lg font-bold text-center mb-4">Pick a player to swap hands with</h3>
             <div className="space-y-2">
               {gameState.players
-                .filter(p => p.id !== playerId && !p.isEliminated && p.cardCount > 0)
+                .filter(p => p.id !== effectivePlayerId && !p.isEliminated && p.cardCount > 0)
                 .map(p => (
                   <button type="button" key={p.id} onClick={() => pickSwapTarget(p.id)}
                     className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold transition-colors">
@@ -376,7 +395,7 @@ export default function Table() {
       </div>
 
       {/* Scoreboard */}
-      {isPlaying && <Scoreboard players={gameState.players} scores={scores} />}
+      {isPlaying && <Scoreboard players={gameState.players} scores={scores} onLogout={logout} />}
 
       {/* Lobby */}
       {isLobby && (
@@ -445,6 +464,11 @@ export default function Table() {
                       onChallenge={unoCallable.includes(p.id) ? () => challengeUno(p.id) : undefined}
                       showSwapButton={showSwapPicker}
                       onSwapPick={() => pickSwapTarget(p.id)}
+                      onKick={!p.connected && !p.isEliminated ? () => kickVote(p.id) : undefined}
+                      kickInfo={!p.connected && gameState.kickVotes?.[p.id] !== undefined ? {
+                        votes: gameState.kickVotes[p.id],
+                        needed: gameState.kickNeeded?.[p.id] ?? 1,
+                      } : undefined}
                     />
                   </div>
                 )
@@ -454,17 +478,18 @@ export default function Table() {
               <div className="absolute inset-0 flex items-center justify-center gap-8 sm:gap-12">
                 <button type="button" onClick={draw} disabled={!isMyTurn}
                   className={`
-                    relative w-16 h-24 sm:w-20 sm:h-28 rounded-xl bg-gray-800 border-2
-                    flex flex-col items-center justify-center shrink-0
-                    ${isMyRoulette ? 'border-red-500 animate-pulse ring-2 ring-red-400 cursor-pointer hover:bg-gray-700' :
-                      isMyTurn ? 'border-gray-600 hover:border-cyan-400 cursor-pointer hover:bg-gray-700 hover:scale-105' :
-                      'border-gray-600 opacity-50 cursor-not-allowed'}
+                    relative w-18 h-28 sm:w-22 sm:h-34 rounded-xl shrink-0 [&>img]:rounded-xl
+                    ${isMyRoulette ? 'ring-2 ring-red-400 animate-pulse cursor-pointer' :
+                      isMyTurn ? 'hover:scale-105 cursor-pointer hover:ring-2 hover:ring-cyan-400' :
+                      'opacity-50 cursor-not-allowed'}
                     transition-all duration-200
                   `}>
-                  <span className="text-xl sm:text-2xl font-black text-gray-500">?</span>
-                  <span className={`text-[9px] mt-0.5 ${isMyRoulette ? 'text-red-400 font-bold' : 'text-gray-500'}`}>
-                    {isMyRoulette ? 'DRAW!' : 'DRAW'}
-                  </span>
+                  <img src="/cards/Back/back.png" alt="Draw pile" className="w-full h-full object-cover" draggable={false} />
+                  {isMyRoulette && (
+                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-black text-red-400 bg-black/60 px-1 rounded">
+                      DRAW!
+                    </span>
+                  )}
                   <span className="absolute -top-2 -right-2 bg-gray-700 text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600 font-bold">
                     {gameState.deckCount}
                   </span>
@@ -473,17 +498,27 @@ export default function Table() {
                 <DiscardPile cards={recentDiscard} activeColor={gameState.activeColor} />
               </div>
 
-              {/* "You" at bottom */}
-              {myPlayer && (
-                <div className="absolute bottom-[6%] left-1/2 -translate-x-1/2 z-10">
-                  <div className={`
-                    px-3 py-1 rounded-full text-xs font-bold
-                    ${isMyTurn ? 'bg-yellow-500/30 text-yellow-300 ring-1 ring-yellow-400' : 'bg-gray-700/80 text-cyan-300'}
-                  `}>
-                    {myPlayer.name} &middot; {hand.length} cards
+              {/* "You" at bottom of circle — on the circle line at 270° */}
+              {myPlayer && (() => {
+                const rad = (270 * Math.PI) / 180
+                const r = 46
+                const left = 50 + r * Math.cos(rad)
+                const top = 50 - r * Math.sin(rad)
+                return (
+                  <div className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
+                    style={{ left: `${left}%`, top: `${top}%` }}>
+                    <PlayerBubble
+                      name={myPlayer.name}
+                      cardCount={hand.length}
+                      isCurrentTurn={isMyTurn}
+                      isSelf={true}
+                      connected={myPlayer.connected}
+                      isEliminated={myPlayer.isEliminated}
+                      isCallable={false}
+                    />
                   </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
           </div>
 

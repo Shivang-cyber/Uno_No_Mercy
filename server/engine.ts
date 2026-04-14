@@ -515,5 +515,7 @@ export function getPublicState(state: GameState): import('../shared/types.js').P
     pendingSwapPlayerId: state.pendingSwapPlayerId,
     unoCallable,
     rouletteActive: state.rouletteActive,
+    kickVotes: {},
+    kickNeeded: {},
   }
 }

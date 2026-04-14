@@ -14,7 +14,6 @@ interface Store {
 
   showColorPicker: boolean
   showSwapPicker: boolean
-  showRouletteColorPicker: boolean  // separate from wild color pick
   pendingWildCardId: string | null
   error: string | null
 
@@ -27,8 +26,9 @@ interface Store {
   challengeUno: (targetId: string) => void
   pickSwapTarget: (targetId: string) => void
   pickColor: (color: Color) => void
-  pickRouletteColor: (color: Color) => void
   clearError: () => void
+  kickVote: (targetId: string) => void
+  logout: () => void
   init: () => void
 }
 
@@ -42,63 +42,111 @@ export const useStore = create<Store>((set, get) => ({
   events: [],
   showColorPicker: false,
   showSwapPicker: false,
-  showRouletteColorPicker: false,
   pendingWildCardId: null,
   error: null,
 
   init: () => {
     connect()
+
+    let didAutoRejoin = false
+
     onMessage((msg) => {
       switch (msg.type) {
         case 'ROOM_CREATED':
           localStorage.setItem('rejoinToken', msg.playerId)
-          localStorage.setItem('roomCode', get().roomCode ?? '')
-          set({ playerId: msg.playerId, roomCode: msg.code ?? get().roomCode })
+          localStorage.setItem('roomCode', msg.code)
+          localStorage.setItem('playerName', get().playerName ?? '')
+          set({ playerId: msg.playerId, roomCode: msg.code })
           break
+
         case 'JOINED':
           localStorage.setItem('rejoinToken', msg.playerId)
           set({ playerId: msg.playerId })
           break
+
         case 'STATE':
           set({ gameState: msg.state, connected: true })
+          // Auto-rejoin: once connected and we have stored session, try to rejoin
+          if (!didAutoRejoin) {
+            didAutoRejoin = true
+            const token = localStorage.getItem('rejoinToken')
+            const code = localStorage.getItem('roomCode')
+            const name = localStorage.getItem('playerName')
+            if (token && code && name && !get().playerId) {
+              set({ playerName: name, roomCode: code })
+              send({ type: 'JOIN', code, name, rejoinToken: token })
+            }
+          }
           break
+
         case 'YOUR_HAND':
           set({ hand: msg.hand })
           break
+
         case 'EVENT':
           set(s => ({ events: [...s.events.slice(-50), msg.event] }))
           break
+
         case 'ERROR':
           set({ error: msg.message })
+          // If room not found, clear stale session
+          if (msg.message.includes('not found')) {
+            localStorage.removeItem('rejoinToken')
+            localStorage.removeItem('roomCode')
+            localStorage.removeItem('playerName')
+            set({ playerId: null, roomCode: null, gameState: null })
+          }
           setTimeout(() => set({ error: null }), 4000)
           break
+
         case 'PICK_COLOR':
-          // Only used if somehow server asks (shouldn't happen with client-side pick)
           set({ showColorPicker: true })
           break
+
         case 'PICK_ROULETTE_COLOR':
-          // Roulette target must pick a color to draw until
-          set({ showRouletteColorPicker: true })
+          set({ showColorPicker: true }) // reuse same picker
           break
+
         case 'PICK_SWAP_TARGET':
           set({ showSwapPicker: true })
           break
+
         case 'ELIMINATED':
           set({ error: `Player eliminated: ${msg.reason}` })
           break
       }
     })
+
+    // Try auto-rejoin immediately after socket opens
+    // The socket's onopen fires before messages, so we send JOIN proactively
+    const token = localStorage.getItem('rejoinToken')
+    const code = localStorage.getItem('roomCode')
+    const name = localStorage.getItem('playerName')
+    if (token && code && name) {
+      set({ playerName: name, roomCode: code })
+      // Small delay to ensure socket is connected
+      setTimeout(() => {
+        if (!get().playerId) {
+          send({ type: 'JOIN', code, name, rejoinToken: token })
+          didAutoRejoin = true
+        }
+      }, 500)
+    }
   },
 
   createRoom: (name) => {
     set({ playerName: name })
+    localStorage.setItem('playerName', name)
     send({ type: 'CREATE', name })
   },
 
   joinRoom: (code, name) => {
-    set({ playerName: name, roomCode: code.toUpperCase() })
+    const upper = code.toUpperCase()
+    set({ playerName: name, roomCode: upper })
+    localStorage.setItem('playerName', name)
+    localStorage.setItem('roomCode', upper)
     const rejoinToken = localStorage.getItem('rejoinToken') ?? undefined
-    send({ type: 'JOIN', code: code.toUpperCase(), name, rejoinToken })
+    send({ type: 'JOIN', code: upper, name, rejoinToken })
   },
 
   startGame: () => {
@@ -139,10 +187,22 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
-  pickRouletteColor: (color) => {
-    set({ showRouletteColorPicker: false })
-    send({ type: 'ROULETTE_COLOR', color })
+  clearError: () => set({ error: null }),
+
+  kickVote: (targetId) => {
+    send({ type: 'KICK_VOTE', targetId })
   },
 
-  clearError: () => set({ error: null }),
+  logout: () => {
+    localStorage.removeItem('rejoinToken')
+    localStorage.removeItem('roomCode')
+    localStorage.removeItem('playerName')
+    set({
+      playerId: null, playerName: null, roomCode: null,
+      gameState: null, hand: [], events: [],
+      showColorPicker: false, showSwapPicker: false,
+      pendingWildCardId: null, error: null,
+    })
+    window.location.reload()
+  },
 }))

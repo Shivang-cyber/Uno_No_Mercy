@@ -72,6 +72,7 @@ export type ClientMessage =
   | { type: 'CHALLENGE_UNO'; targetId: string }
   | { type: 'SWAP_PICK'; targetId: string }  // after playing a 7
   | { type: 'ROULETTE_COLOR'; color: Color } // roulette target picks a color to draw until
+  | { type: 'KICK_VOTE'; targetId: string }  // vote to kick an offline player
 
 // ── Messages: Server → Client ────────────────────────────────────
 
@@ -112,6 +113,8 @@ export interface PublicGameState {
   pendingSwapPlayerId: string | null
   unoCallable: string[]       // player IDs who have 1 card and haven't called UNO yet (challengeable)
   rouletteActive: boolean     // true = current player is in roulette phase
+  kickVotes: Record<string, number>  // targetId -> number of votes received
+  kickNeeded: Record<string, number> // targetId -> votes needed to kick
 }
 
 // ── Game Events (for animation / log) ────────────────────────────
