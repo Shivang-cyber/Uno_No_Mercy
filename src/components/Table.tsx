@@ -250,8 +250,8 @@ function Scoreboard({ players, scores }: {
 export default function Table() {
   const {
     gameState, hand, playerId, playCard, draw, callUno, challengeUno,
-    pickSwapTarget, pickColor, pickRouletteColor,
-    showColorPicker, showSwapPicker, showRouletteColorPicker, startGame, error,
+    pickSwapTarget, pickColor,
+    showColorPicker, showSwapPicker, startGame, error,
   } = useStore()
 
   const [drawAnim, setDrawAnim] = useState<{ count: number } | null>(null)
@@ -288,6 +288,8 @@ export default function Table() {
   const isHost = gameState.players[0]?.id === playerId
   const myIndex = gameState.players.findIndex(p => p.id === playerId)
   const isMyTurn = isPlaying && gameState.turnIndex === myIndex
+  const rouletteActive = gameState.rouletteActive ?? false
+  const isMyRoulette = isMyTurn && rouletteActive
   const unoCallable = gameState.unoCallable ?? []
   const iAmCallable = unoCallable.includes(playerId ?? '')
   const recentDiscard = gameState.recentDiscard ?? (gameState.topDiscard ? [gameState.topDiscard] : [])
@@ -297,8 +299,9 @@ export default function Table() {
     .filter(p => p.id !== playerId)
   const myPlayer = gameState.players[myIndex]
 
+  // During roulette, can't play any cards — must draw
   const canPlayCards = new Set<string>()
-  if (isMyTurn && hand.length > 0 && gameState.topDiscard) {
+  if (isMyTurn && !rouletteActive && hand.length > 0 && gameState.topDiscard) {
     for (const card of hand) {
       if (canPlayCheck(card, gameState)) canPlayCards.add(card.id)
     }
@@ -325,7 +328,6 @@ export default function Table() {
       {passAnim && <PassAnimation direction={passAnim.direction} onDone={clearPassAnim} />}
       {swapAnim && <SwapAnimation p1={swapAnim.p1} p2={swapAnim.p2} onDone={clearSwapAnim} />}
       {showColorPicker && <ColorPicker onPick={pickColor} />}
-      {showRouletteColorPicker && <ColorPicker onPick={pickRouletteColor} title="Roulette! Pick a color to draw until" />}
 
       {showSwapPicker && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -444,13 +446,17 @@ export default function Table() {
               <div className="absolute inset-0 flex items-center justify-center gap-3 sm:gap-5">
                 <button type="button" onClick={draw} disabled={!isMyTurn}
                   className={`
-                    relative w-16 h-24 sm:w-20 sm:h-28 rounded-xl bg-gray-800 border-2 border-gray-600
+                    relative w-16 h-24 sm:w-20 sm:h-28 rounded-xl bg-gray-800 border-2
                     flex flex-col items-center justify-center shrink-0
-                    ${isMyTurn ? 'hover:border-cyan-400 cursor-pointer hover:bg-gray-700 hover:scale-105' : 'opacity-50 cursor-not-allowed'}
+                    ${isMyRoulette ? 'border-red-500 animate-pulse ring-2 ring-red-400 cursor-pointer hover:bg-gray-700' :
+                      isMyTurn ? 'border-gray-600 hover:border-cyan-400 cursor-pointer hover:bg-gray-700 hover:scale-105' :
+                      'border-gray-600 opacity-50 cursor-not-allowed'}
                     transition-all duration-200
                   `}>
                   <span className="text-xl sm:text-2xl font-black text-gray-500">?</span>
-                  <span className="text-[9px] text-gray-500 mt-0.5">DRAW</span>
+                  <span className={`text-[9px] mt-0.5 ${isMyRoulette ? 'text-red-400 font-bold' : 'text-gray-500'}`}>
+                    {isMyRoulette ? 'DRAW!' : 'DRAW'}
+                  </span>
                   <span className="absolute -top-2 -right-2 bg-gray-700 text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600 font-bold">
                     {gameState.deckCount}
                   </span>
@@ -476,7 +482,11 @@ export default function Table() {
           {/* Turn indicator */}
           <div className="text-center py-0.5 text-sm shrink-0">
             {isMyTurn ? (
-              <span className="text-yellow-400 font-bold animate-pulse">Your turn!</span>
+              <span className="text-yellow-400 font-bold animate-pulse">
+                {isMyRoulette
+                  ? `Roulette! Keep drawing until you get ${gameState.activeColor?.toUpperCase()}!`
+                  : 'Your turn!'}
+              </span>
             ) : (
               <span className="text-gray-400">{gameState.players[gameState.turnIndex]?.name}'s turn</span>
             )}
