@@ -3,24 +3,21 @@ import type { PublicGameState, Card, Color, GameEvent } from '../shared/types'
 import { connect, send, onMessage } from './lib/socket'
 
 interface Store {
-  // Connection
   connected: boolean
   playerId: string | null
   playerName: string | null
   roomCode: string | null
 
-  // Game
   gameState: PublicGameState | null
   hand: Card[]
   events: GameEvent[]
 
-  // UI
   showColorPicker: boolean
   showSwapPicker: boolean
-  pendingWildCardId: string | null  // card awaiting color pick
+  showRouletteColorPicker: boolean  // separate from wild color pick
+  pendingWildCardId: string | null
   error: string | null
 
-  // Actions
   createRoom: (name: string) => void
   joinRoom: (code: string, name: string) => void
   startGame: () => void
@@ -30,6 +27,7 @@ interface Store {
   challengeUno: (targetId: string) => void
   pickSwapTarget: (targetId: string) => void
   pickColor: (color: Color) => void
+  pickRouletteColor: (color: Color) => void
   clearError: () => void
   init: () => void
 }
@@ -44,6 +42,7 @@ export const useStore = create<Store>((set, get) => ({
   events: [],
   showColorPicker: false,
   showSwapPicker: false,
+  showRouletteColorPicker: false,
   pendingWildCardId: null,
   error: null,
 
@@ -74,7 +73,12 @@ export const useStore = create<Store>((set, get) => ({
           setTimeout(() => set({ error: null }), 4000)
           break
         case 'PICK_COLOR':
+          // Only used if somehow server asks (shouldn't happen with client-side pick)
           set({ showColorPicker: true })
+          break
+        case 'PICK_ROULETTE_COLOR':
+          // Roulette target must pick a color to draw until
+          set({ showRouletteColorPicker: true })
           break
         case 'PICK_SWAP_TARGET':
           set({ showSwapPicker: true })
@@ -104,7 +108,6 @@ export const useStore = create<Store>((set, get) => ({
   playCard: (cardId, chosenColor) => {
     const card = get().hand.find(c => c.id === cardId)
     if (card?.color === 'wild' && !chosenColor) {
-      // Wild card — need color pick first
       set({ pendingWildCardId: cardId, showColorPicker: true })
       return
     }
@@ -132,17 +135,13 @@ export const useStore = create<Store>((set, get) => ({
     const pendingId = get().pendingWildCardId
     set({ showColorPicker: false, pendingWildCardId: null })
     if (pendingId) {
-      // Playing a wild card from hand — send PLAY with color
       send({ type: 'PLAY', cardId: pendingId, chosenColor: color })
-    } else {
-      // Server asked for color (e.g. roulette target picking)
-      // Send as a special roulette color choice
-      const state = get().gameState
-      if (state) {
-        // For roulette: the current player picks a color to draw until
-        send({ type: 'PLAY', cardId: '__roulette_color', chosenColor: color })
-      }
     }
+  },
+
+  pickRouletteColor: (color) => {
+    set({ showRouletteColorPicker: false })
+    send({ type: 'ROULETTE_COLOR', color })
   },
 
   clearError: () => set({ error: null }),

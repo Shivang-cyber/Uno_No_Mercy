@@ -48,11 +48,15 @@ export interface GameState {
   winner: string | null     // player id of winner
   lastAction: GameEvent | null
 
-  // for wild color roulette
+  // for wild color roulette — when set, current player must pick color then draw
   rouletteTargetColor: Color | null
+  rouletteActive: boolean            // true = current player is in roulette, can't play cards
 
   // for 7's swap — waiting for player to pick target
   pendingSwapPlayerId: string | null
+
+  // UNO tracking
+  calledUno: Set<string>      // players who have called UNO this turn cycle
 }
 
 // ── Messages: Client → Server ────────────────────────────────────
@@ -67,6 +71,7 @@ export type ClientMessage =
   | { type: 'CALL_UNO' }
   | { type: 'CHALLENGE_UNO'; targetId: string }
   | { type: 'SWAP_PICK'; targetId: string }  // after playing a 7
+  | { type: 'ROULETTE_COLOR'; color: Color } // roulette target picks a color to draw until
 
 // ── Messages: Server → Client ────────────────────────────────────
 
@@ -78,7 +83,8 @@ export type ServerMessage =
   | { type: 'EVENT'; event: GameEvent }
   | { type: 'ERROR'; message: string }
   | { type: 'PICK_SWAP_TARGET' }    // server asks player to pick a swap target (after 7)
-  | { type: 'PICK_COLOR' }          // server asks player to pick color (after wild)
+  | { type: 'PICK_COLOR' }          // server asks player to pick color (after wild, client-side only now)
+  | { type: 'PICK_ROULETTE_COLOR' } // server asks roulette target to pick a color
   | { type: 'ELIMINATED'; playerId: string; reason: string }
 
 // ── Public Game State (sent to all, no hidden hands) ─────────────
@@ -96,6 +102,7 @@ export interface PublicGameState {
   phase: Phase
   players: PublicPlayerInfo[]
   topDiscard: Card | null
+  recentDiscard: Card[]       // last 5 discarded cards (top = last element)
   activeColor: Color | null
   turnIndex: number
   direction: Direction
@@ -103,6 +110,8 @@ export interface PublicGameState {
   deckCount: number
   winner: string | null
   pendingSwapPlayerId: string | null
+  unoCallable: string[]       // player IDs who have 1 card and haven't called UNO yet (challengeable)
+  rouletteActive: boolean     // true = current player is in roulette phase
 }
 
 // ── Game Events (for animation / log) ────────────────────────────
