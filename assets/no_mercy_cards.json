@@ -1,0 +1,88 @@
+{
+  "uno_no_mercy": {
+    "deck_size": 168,
+    "card_types": {
+      "number_cards": [
+        {
+          "name": "Standard Numbers (1-6, 8-9)",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "Match by color or number."
+        },
+        {
+          "name": "0 (0's Pass)",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "All players must pass their entire hand of cards to the next player in the current direction of play."
+        },
+        {
+          "name": "7 (7's Swap)",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "The player gets to swap their entire hand with any player of their choice."
+        }
+      ],
+      "colored_action_cards": [
+        {
+          "name": "Skip",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "The next player loses their turn."
+        },
+        {
+          "name": "Reverse",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "The direction of play switches."
+        },
+        {
+          "name": "Draw 2",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "The next player must draw 2 cards and lose their turn."
+        },
+        {
+          "name": "Draw 4",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "The next player must draw 4 cards and lose their turn."
+        },
+        {
+          "name": "Discard All",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "Discard all cards in your hand that match the color of this card."
+        },
+        {
+          "name": "Skip Everyone",
+          "color": "Red, Blue, Green, Yellow",
+          "effect": "Skips all other players; the person who played the card takes another turn."
+        }
+      ],
+      "wild_action_cards": [
+        {
+          "name": "Wild Reverse Draw 4",
+          "color": "Wild",
+          "effect": "Reverses the direction of play, and the next player in the new direction draws 4 cards and loses their turn. You choose the new color."
+        },
+        {
+          "name": "Wild Draw 6",
+          "color": "Wild",
+          "effect": "The next player must draw 6 cards and lose their turn. You choose the new color."
+        },
+        {
+          "name": "Wild Draw 10",
+          "color": "Wild",
+          "effect": "The next player must draw 10 cards and lose their turn. You choose the new color."
+        },
+        {
+          "name": "Wild Color Roulette",
+          "color": "Wild",
+          "effect": "The next player chooses a color and draws cards until they reveal a card of that color. They keep all drawn cards and lose their turn. You choose the new color."
+        }
+      ]
+    },
+    "special_rules": [
+      {
+        "name": "Stacking",
+        "description": "Players can pass a Draw penalty (+2, +4, +6, or +10) to the next player by playing a Draw card of equal or higher value. The penalties compound."
+      },
+      {
+        "name": "The Mercy Rule",
+        "description": "If a player acquires 25 or more cards in their hand at any point, they are immediately eliminated from the game."
+      }
+    ]
+  }
+}
