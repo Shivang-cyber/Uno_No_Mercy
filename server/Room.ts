@@ -162,11 +162,6 @@ export class Room {
           }
         }
         this.broadcastState()
-        // If roulette is now active, prompt the next player to pick a color
-        if (this.state.rouletteActive && !this.state.rouletteTargetColor) {
-          const target = this.state.players[this.state.turnIndex]
-          this.sendToPlayer(target.id, { type: 'PICK_ROULETTE_COLOR' })
-        }
         break
       }
 
@@ -190,17 +185,6 @@ export class Room {
         for (const evt of events) {
           this.broadcast({ type: 'EVENT', event: evt })
         }
-        this.broadcastState()
-        break
-      }
-
-      case 'ROULETTE_COLOR': {
-        if (!this.state || !this.state.rouletteActive) return
-        // The current player picks a color, then draws until they hit it
-        const target = this.state.players[this.state.turnIndex]
-        if (target.id !== conn.playerId) return
-        const { events: rEvents } = handleRoulette(this.state, target.id, msg.color)
-        for (const evt of rEvents) this.broadcast({ type: 'EVENT', event: evt })
         this.broadcastState()
         break
       }

@@ -83,7 +83,7 @@ export function initGame(code: string, players: Pick<Player, 'id' | 'name'>[]): 
     winner: null,
     lastAction: null,
     rouletteTargetColor: null,
-    rouletteActive: false,
+    rouletteActive: false, // kept for type compat but no longer used
     pendingSwapPlayerId: null,
     calledUno: new Set<string>(),
   }
@@ -197,7 +197,7 @@ export function playCard(
 
   if (player.id !== playerId) return { ok: false, events: [] }
   if (state.phase !== 'playing') return { ok: false, events: [] }
-  if (state.rouletteActive) return { ok: false, events: [] } // can't play cards during roulette
+  if (state.rouletteActive) return { ok: false, events: [] }
 
   const cardIdx = player.hand.findIndex(c => c.id === cardId)
   if (cardIdx === -1) return { ok: false, events: [] }
@@ -319,10 +319,10 @@ export function playCard(
     }
 
     case 'wild_roulette': {
-      // Next player must pick a color and draw until they hit it
+      // Victim must draw one-at-a-time until they hit the active color
       advanceTurn(state)
-      state.rouletteActive = true      // lock out card playing
-      state.rouletteTargetColor = null  // will be set when target picks
+      state.rouletteActive = true
+      state.rouletteTargetColor = state.activeColor
       break
     }
 
@@ -346,6 +346,30 @@ export function handleDraw(state: GameState, playerId: string): { events: GameEv
   const events: GameEvent[] = []
   const player = currentPlayer(state)
   if (player.id !== playerId || state.phase !== 'playing') return { events: [], drawnCards: [] }
+
+  // ── Roulette mode: draw 1 card, check if it matches the target color
+  if (state.rouletteActive && state.rouletteTargetColor) {
+    const drawn = drawCards(state, 1)
+    if (drawn.length > 0) {
+      player.hand.push(drawn[0])
+      events.push({ event: 'cards_drawn', playerId, count: 1 })
+
+      if (drawn[0].color === state.rouletteTargetColor) {
+        // Hit the color — roulette over, victim loses turn
+        events.push({ event: 'roulette', targetId: playerId, chosenColor: state.rouletteTargetColor, cardsDrawn: 1 })
+        state.rouletteActive = false
+        state.rouletteTargetColor = null
+        events.push(...checkMercy(state))
+        const winEvt = checkWinner(state)
+        if (winEvt) events.push(winEvt)
+        advanceTurn(state)
+      } else {
+        // Didn't hit — stay on same player, they must draw again
+        events.push(...checkMercy(state))
+      }
+    }
+    return { events, drawnCards: drawn }
+  }
 
   let totalDraw: number
 
