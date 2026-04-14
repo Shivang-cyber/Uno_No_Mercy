@@ -11,23 +11,21 @@ function DirectionArrow({ direction, size = 200 }: { direction: 1 | -1; size?: n
   const r = size * 0.42
   const cx = size / 2
   const cy = size / 2
-  // Draw arc from top-right, going clockwise
-  const startAngle = -60
-  const endAngle = 30
   const toRad = (deg: number) => (deg * Math.PI) / 180
-  const sx = cx + r * Math.cos(toRad(startAngle))
-  const sy = cy + r * Math.sin(toRad(startAngle))
-  const ex = cx + r * Math.cos(toRad(endAngle))
-  const ey = cy + r * Math.sin(toRad(endAngle))
 
-  // Arrowhead at end of arc
-  const arrowAngle = toRad(endAngle)
-  const tangentAngle = arrowAngle + Math.PI / 2 // perpendicular to radius = tangent
-  const aLen = 10
-  const ax1 = ex + aLen * Math.cos(tangentAngle - 0.4)
-  const ay1 = ey + aLen * Math.sin(tangentAngle - 0.4)
-  const ax2 = ex + aLen * Math.cos(tangentAngle + 0.4)
-  const ay2 = ey + aLen * Math.sin(tangentAngle + 0.4)
+  const startDeg = 100
+  const endDeg = 170
+  const sx = cx + r * Math.cos(toRad(startDeg))
+  const sy = cy + r * Math.sin(toRad(startDeg))
+  const ex = cx + r * Math.cos(toRad(endDeg))
+  const ey = cy + r * Math.sin(toRad(endDeg))
+
+  const tangent = toRad(endDeg) + Math.PI / 2
+  const aLen = 9
+  const ax1 = ex + aLen * Math.cos(tangent - 0.5)
+  const ay1 = ey + aLen * Math.sin(tangent - 0.5)
+  const ax2 = ex + aLen * Math.cos(tangent + 0.5)
+  const ay2 = ey + aLen * Math.sin(tangent + 0.5)
 
   return (
     <svg
@@ -39,14 +37,14 @@ function DirectionArrow({ direction, size = 200 }: { direction: 1 | -1; size?: n
       <path
         d={`M ${sx} ${sy} A ${r} ${r} 0 0 1 ${ex} ${ey}`}
         fill="none"
-        stroke="rgba(255,255,255,0.12)"
-        strokeWidth="2.5"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="2"
         strokeLinecap="round"
-        strokeDasharray="6 4"
+        strokeDasharray="5 3"
       />
       <polygon
         points={`${ex},${ey} ${ax1},${ay1} ${ax2},${ay2}`}
-        fill="rgba(255,255,255,0.18)"
+        fill="rgba(255,255,255,0.22)"
       />
     </svg>
   )
@@ -56,10 +54,10 @@ function DirectionArrow({ direction, size = 200 }: { direction: 1 | -1; size?: n
 
 function DiscardPile({ cards, activeColor }: { cards: CardType[]; activeColor: Color | null }) {
   const show = cards.slice(-3) // only last 3
-  if (show.length === 0) return <div className="w-16 h-24 sm:w-20 sm:h-28 rounded-lg border-2 border-dashed border-gray-600" />
+  if (show.length === 0) return <div className="w-18 h-28 sm:w-22 sm:h-34 rounded-lg border-2 border-dashed border-gray-600" />
 
   return (
-    <div className="relative w-24 h-28 sm:w-28 sm:h-32">
+    <div className="relative w-28 h-32 sm:w-34 sm:h-40">
       {show.map((card, i) => {
         const xOff = (i - (show.length - 1)) * 8
         const rotate = (i - (show.length - 1)) * 5
@@ -163,9 +161,9 @@ function PlayerBubble({
         className={`
           w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center
           text-lg sm:text-xl font-black transition-all duration-300
-          ${isCurrentTurn ? 'ring-3 ring-yellow-400 bg-yellow-500/30 scale-110' : 'bg-gray-700/80'}
+          ${isCurrentTurn ? 'ring-3 ring-yellow-400 bg-yellow-600 scale-110' : 'bg-gray-700'}
           ${!connected ? 'opacity-40' : ''}
-          ${isEliminated ? 'opacity-20 bg-red-900/40' : ''}
+          ${isEliminated ? 'opacity-20 bg-red-900' : ''}
           ${isSelf ? 'ring-2 ring-cyan-400' : ''}
           ${cardCount === 1 && !isEliminated ? 'text-red-400 animate-pulse' : 'text-white'}
         `}
@@ -294,9 +292,16 @@ export default function Table() {
   const iAmCallable = unoCallable.includes(playerId ?? '')
   const recentDiscard = gameState.recentDiscard ?? (gameState.topDiscard ? [gameState.topDiscard] : [])
 
-  const otherPlayers = gameState.players
-    .map((p, i) => ({ ...p, originalIndex: i }))
-    .filter(p => p.id !== playerId)
+  // Arrange other players in turn order starting from the player after me (clockwise).
+  // This puts my "next" player to the left, wrapping around the top arc.
+  const playerCount = gameState.players.length
+  const orderedOthers: { id: string; name: string; cardCount: number; connected: boolean; isEliminated: boolean; originalIndex: number }[] = []
+  for (let offset = 1; offset < playerCount; offset++) {
+    const idx = (myIndex + offset) % playerCount
+    const p = gameState.players[idx]
+    orderedOthers.push({ ...p, originalIndex: idx })
+  }
+  const otherPlayers = orderedOthers
   const myPlayer = gameState.players[myIndex]
 
   // During roulette, can't play any cards — must draw
@@ -307,13 +312,16 @@ export default function Table() {
     }
   }
 
-  // Position others along top arc
-  function getArcPosition(index: number, total: number) {
-    if (total === 1) return { angle: 0 }
-    const spread = Math.min(150, total * 32)
-    const start = -spread / 2
-    const step = total > 1 ? spread / (total - 1) : 0
-    return { angle: start + step * index }
+  // Distribute ALL players (including me) equally around 360°.
+  // "You" sits at the bottom (270° in standard math / 6 o'clock).
+  // Others fill the remaining slots clockwise from you.
+  // With N total players, each slot = 360/N degrees apart.
+  // otherPlayers[0] is next after me, so they get slot 1, etc.
+  function getPlayerAngle(index: number, totalOthers: number): number {
+    const totalPlayers = totalOthers + 1 // +1 for me
+    const slotDeg = 360 / totalPlayers
+    // My position = 270° (bottom). Next player = 270 + slotDeg, etc.
+    return 270 + slotDeg * (index + 1)
   }
 
   return (
@@ -420,11 +428,11 @@ export default function Table() {
 
               {/* Other players on top arc */}
               {otherPlayers.map((p, i) => {
-                const { angle } = getArcPosition(i, otherPlayers.length)
-                const rad = (angle - 90) * Math.PI / 180
+                const angleDeg = getPlayerAngle(i, otherPlayers.length)
+                const rad = (angleDeg * Math.PI) / 180
                 const r = 46
                 const left = 50 + r * Math.cos(rad)
-                const top = 50 + r * Math.sin(rad)
+                const top = 50 - r * Math.sin(rad)
 
                 return (
                   <div key={p.id} className="absolute -translate-x-1/2 -translate-y-1/2 z-10"

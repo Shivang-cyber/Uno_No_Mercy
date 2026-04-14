@@ -18,7 +18,7 @@ const colorBorder: Record<string, string> = {
 }
 
 export default function Card({ card, onClick, selected, small, disabled, dimmed }: CardProps) {
-  const size = small ? 'w-14 h-20 sm:w-16 sm:h-24' : 'w-16 h-24 sm:w-20 sm:h-30'
+  const size = small ? 'w-14 h-22 sm:w-16 sm:h-26' : 'w-18 h-28 sm:w-22 sm:h-34'
 
   return (
     <button
