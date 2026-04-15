@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useStore } from '../store'
+import RulesModal, { RulesButton } from './RulesModal'
 
 export default function Lobby() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu')
+  const [showRules, setShowRules] = useState(false)
   const { createRoom, joinRoom, error } = useStore()
 
   const handleCreate = () => {
@@ -124,6 +126,10 @@ export default function Lobby() {
           </div>
         )}
       </div>
+
+      {/* Rules button + modal */}
+      <RulesButton onClick={() => setShowRules(true)} position="bottom-left" />
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
     </div>
   )
 }
