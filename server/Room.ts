@@ -133,6 +133,7 @@ export class Room {
           cardCount: 0,
           connected: true,
           isEliminated: false,
+          finishRank: null,
         })),
         topDiscard: null,
         recentDiscard: [],
@@ -242,6 +243,12 @@ export class Room {
         break
       }
 
+      case 'EMOTE': {
+        // Broadcast emote to everyone — works in lobby AND game
+        this.broadcast({ type: 'EVENT', event: { event: 'emote', playerId: conn.playerId, emote: msg.emote } })
+        break
+      }
+
       case 'KICK_VOTE': {
         if (!this.state) return
         const target = this.state.players.find(p => p.id === msg.targetId)
@@ -269,9 +276,10 @@ export class Room {
     const p = this.state.players.find(pp => pp.id === playerId)
     if (!p || p.hand.length === 0) return
 
-    // Shuffle hand back into deck
+    // Shuffle hand back into deck — treat as eliminated (kicked, mercy-style)
     this.state.deck.push(...p.hand)
     p.hand = []
+    p.eliminated = true
 
     // If it was their turn, advance
     const pIdx = this.state.players.indexOf(p)

@@ -28,6 +28,7 @@ interface Store {
   pickColor: (color: Color) => void
   clearError: () => void
   kickVote: (targetId: string) => void
+  sendEmote: (emote: string) => void
   logout: () => void
   init: () => void
 }
@@ -191,6 +192,10 @@ export const useStore = create<Store>((set, get) => ({
 
   kickVote: (targetId) => {
     send({ type: 'KICK_VOTE', targetId })
+  },
+
+  sendEmote: (emote) => {
+    send({ type: 'EMOTE', emote })
   },
 
   logout: () => {

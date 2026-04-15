@@ -4,6 +4,7 @@ import type { Color, Card as CardType } from '../../shared/types'
 import Card from './Card'
 import Hand from './Hand'
 import ColorPicker from './ColorPicker'
+import EmotePicker, { FloatingEmote } from './EmotePicker'
 
 // ── Direction arrow ──────────────────────────────────────────────
 
@@ -101,27 +102,61 @@ function DiscardPile({ cards, activeColor }: { cards: CardType[]; activeColor: C
   )
 }
 
-// ── Draw animation ───────────────────────────────────────────────
+// ── Single flying card from draw pile to target position ─────────
 
-function DrawAnimation({ count, onDone }: { count: number; onDone: () => void }) {
+function FlyingCard({
+  startLeft = 50, startTop = 50, targetLeft, targetTop, delay, duration = 700, onDone,
+}: {
+  startLeft?: number
+  startTop?: number
+  targetLeft: number
+  targetTop: number
+  delay: number
+  duration?: number
+  onDone: () => void
+}) {
+  const [phase, setPhase] = useState<'start' | 'flying' | 'done'>('start')
+
   useEffect(() => {
-    const timer = setTimeout(onDone, 1000 + Math.min(count, 10) * 120)
-    return () => clearTimeout(timer)
-  }, [count, onDone])
+    const t1 = setTimeout(() => setPhase('flying'), delay)
+    const t2 = setTimeout(() => { setPhase('done'); onDone() }, delay + duration)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [delay, duration, onDone])
+
+  if (phase === 'done') return null
+
+  const left = phase === 'start' ? startLeft : targetLeft
+  const top = phase === 'start' ? startTop : targetTop
+  const opacity = phase === 'start' ? 0 : 1
+
+  return (
+    <div
+      className="absolute -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
+      style={{
+        left: `${left}%`,
+        top: `${top}%`,
+        opacity,
+        transition: `left ${duration}ms cubic-bezier(0.4, 0, 0.2, 1), top ${duration}ms cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s`,
+      }}
+    >
+      <img src="/cards/Back/back.png" alt="" className="w-12 h-18 sm:w-14 sm:h-20 rounded-lg shadow-2xl" />
+    </div>
+  )
+}
+
+// ── Big "+N drawn" toast (only for forced draws of 2+) ───────────
+
+function DrawToast({ count, name, onDone }: { count: number; name: string; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 1500)
+    return () => clearTimeout(t)
+  }, [onDone])
 
   return (
     <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
-      <div className="bg-black/60 rounded-2xl px-8 py-5 flex flex-col items-center backdrop-blur-sm">
-        <div className="flex gap-0.5">
-          {Array.from({ length: Math.min(count, 10) }).map((_, i) => (
-            <div
-              key={i}
-              className="w-7 h-10 bg-gray-700 border border-gray-500 rounded animate-card-fly"
-              style={{ animationDelay: `${i * 100}ms` }}
-            />
-          ))}
-        </div>
-        <div className="text-3xl font-black text-red-400 mt-2 animate-bounce">+{count}</div>
+      <div className="bg-black/60 rounded-2xl px-6 py-3 backdrop-blur-sm animate-fade-in">
+        <div className="text-2xl font-black text-red-400 text-center">+{count}</div>
+        <div className="text-xs text-gray-300 text-center mt-1">{name} draws</div>
       </div>
     </div>
   )
@@ -153,32 +188,78 @@ function SwapAnimation({ p1, p2, onDone }: { p1: string; p2: string; onDone: () 
   )
 }
 
+// ── Skipped overlay (semi-transparent skip card on the skipped player) ──
+
+function SkippedOverlay({ left, top, cardImage, onDone }: {
+  left: number; top: number; cardImage: string; onDone: () => void
+}) {
+  const [phase, setPhase] = useState<'enter' | 'show' | 'exit'>('enter')
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('show'), 50)
+    const t2 = setTimeout(() => setPhase('exit'), 1500)
+    const t3 = setTimeout(onDone, 1900)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [onDone])
+
+  return (
+    <div
+      className={`absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none transition-all duration-500 ease-out
+        ${phase === 'enter' ? 'scale-75 opacity-0' : ''}
+        ${phase === 'show' ? 'scale-100 opacity-70' : ''}
+        ${phase === 'exit' ? 'scale-110 opacity-0' : ''}
+      `}
+      style={{ left: `${left}%`, top: `${top}%` }}
+    >
+      <img
+        src={`/cards/${cardImage}`}
+        alt="skipped"
+        className="w-16 h-24 sm:w-20 sm:h-28 rounded-lg shadow-2xl border-2 border-white/80"
+      />
+    </div>
+  )
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function toOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
 // ── Player bubble ────────────────────────────────────────────────
 
 function PlayerBubble({
-  name, cardCount, isCurrentTurn, isSelf, connected, isEliminated,
+  name, cardCount, isCurrentTurn, isSelf, connected, isEliminated, finishRank,
   isCallable, onChallenge, showSwapButton, onSwapPick,
   onKick, kickInfo,
 }: {
   name: string; cardCount: number; isCurrentTurn: boolean; isSelf: boolean
-  connected: boolean; isEliminated: boolean; isCallable: boolean
+  connected: boolean; isEliminated: boolean; finishRank: number | null; isCallable: boolean
   onChallenge?: () => void; showSwapButton?: boolean; onSwapPick?: () => void
   onKick?: () => void; kickInfo?: { votes: number; needed: number }
 }) {
+  const finished = finishRank !== null
+  const rankLabel = finishRank ? toOrdinal(finishRank) : null
+  const rankBg = finishRank === 1 ? 'bg-yellow-500' : finishRank === 2 ? 'bg-gray-400' : finishRank === 3 ? 'bg-orange-700' : 'bg-emerald-700'
+
   return (
     <div className="flex flex-col items-center gap-0.5">
       <div
         className={`
           w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center
           text-lg sm:text-xl font-black transition-all duration-300
-          ${isCurrentTurn ? 'ring-3 ring-yellow-400 bg-yellow-600 scale-110' : 'bg-gray-700'}
-          ${!connected ? 'opacity-40' : ''}
-          ${isEliminated ? 'opacity-20 bg-red-900' : ''}
+          ${isCurrentTurn && !finished && !isEliminated ? 'ring-3 ring-yellow-400 bg-yellow-600 scale-110' : ''}
+          ${finished ? `${rankBg} ring-2 ring-white/40` : ''}
+          ${!finished && !isCurrentTurn && !isEliminated ? 'bg-gray-700' : ''}
+          ${!connected && !finished ? 'opacity-40' : ''}
+          ${isEliminated ? 'opacity-30 bg-red-900' : ''}
           ${isSelf ? 'ring-2 ring-cyan-400' : ''}
-          ${cardCount === 1 && !isEliminated ? 'text-red-400 animate-pulse' : 'text-white'}
+          ${cardCount === 1 && !isEliminated && !finished ? 'text-red-400 animate-pulse' : 'text-white'}
         `}
       >
-        {isEliminated ? 'X' : cardCount}
+        {isEliminated ? 'X' : finished ? rankLabel : cardCount}
       </div>
       <span className={`text-[10px] sm:text-xs font-semibold truncate max-w-[60px] ${isSelf ? 'text-cyan-300' : 'text-gray-300'}`}>
         {name}
@@ -272,40 +353,211 @@ function Scoreboard({ players, scores, onLogout }: {
 export default function Table() {
   const {
     gameState, hand, playerId, playCard, draw, callUno, challengeUno,
-    pickSwapTarget, pickColor, kickVote, logout,
+    pickSwapTarget, pickColor, kickVote, sendEmote, logout,
     showColorPicker, showSwapPicker, startGame, error,
   } = useStore()
 
-  const [drawAnim, setDrawAnim] = useState<{ count: number } | null>(null)
+  const [drawToast, setDrawToast] = useState<{ count: number; name: string } | null>(null)
+  const [skippedBubbles, setSkippedBubbles] = useState<{ id: number; left: number; top: number; cardImage: string }[]>([])
+  const [flyingCards, setFlyingCards] = useState<{
+    id: number
+    startLeft?: number
+    startTop?: number
+    targetLeft: number
+    targetTop: number
+    delay: number
+    duration?: number
+  }[]>([])
   const [passAnim, setPassAnim] = useState<{ direction: 1 | -1 } | null>(null)
   const [swapAnim, setSwapAnim] = useState<{ p1: string; p2: string } | null>(null)
   const [scores] = useState<Record<string, number>>({})
+  const [showEmotePicker, setShowEmotePicker] = useState(false)
+  const [activeEmotes, setActiveEmotes] = useState<{ id: number; emote: string; fromAngle: number; toAngle: number }[]>([])
   const events = useStore(s => s.events)
 
   useEffect(() => {
-    if (events.length === 0) return
+    if (events.length === 0 || !gameState) return
     const last = events[events.length - 1]
-    if (last.event === 'cards_drawn' && last.count > 1) {
-      setDrawAnim({ count: last.count })
+    if (last.event === 'cards_drawn') {
+      // Flying card animation from draw pile to recipient
+      const recipientIdx = gameState.players.findIndex(p => p.id === last.playerId)
+      if (recipientIdx === -1) return
+      const myIdxLocal = gameState.players.findIndex(p => p.id === playerId)
+      const totalPlayers = gameState.players.length
+
+      // Compute target position (relative to circle container)
+      // - Me: cards fly DOWN past the circle into my hand area (~130%)
+      // - Others: cards fly to their bubble on the circle line (r=46)
+      let targetLeft = 50, targetTop = 130
+      if (recipientIdx !== myIdxLocal) {
+        const offset = (recipientIdx - myIdxLocal + totalPlayers) % totalPlayers
+        const slotDeg = 360 / totalPlayers
+        const angle = 270 + slotDeg * offset
+        const rad = (angle * Math.PI) / 180
+        const r = 46
+        targetLeft = 50 + r * Math.cos(rad)
+        targetTop = 50 - r * Math.sin(rad)
+      }
+
+      // Spawn N flying cards. Stagger the START but keep DURATION constant
+      // so each card travels at the same speed.
+      const total = Math.min(last.count, 12)
+      const stagger = total > 1 ? 80 : 0  // ms between launches
+      const newCards = Array.from({ length: total }, (_, i) => ({
+        id: Date.now() + i + Math.random(),
+        targetLeft,
+        targetTop,
+        delay: i * stagger,
+        duration: 700, // consistent flight time per card
+      }))
+      setFlyingCards(prev => [...prev, ...newCards])
+
+      // Show "+N" toast for forced draws (2+)
+      if (last.count > 1) {
+        const name = gameState.players[recipientIdx]?.name ?? '?'
+        setDrawToast({ count: last.count, name })
+      }
     } else if (last.event === 'hands_passed') {
       setPassAnim({ direction: last.direction })
+
+      // Card-fly animation: each player's "card" travels to the next player in direction
+      const myIdxLocal = gameState.players.findIndex(p => p.id === playerId)
+      const totalPlayers = gameState.players.length
+      const dir = last.direction
+      const positionFor = (idx: number): { left: number; top: number } => {
+        if (idx === myIdxLocal) return { left: 50, top: 130 } // me = below circle (hand)
+        const offset = (idx - myIdxLocal + totalPlayers) % totalPlayers
+        const slotDeg = 360 / totalPlayers
+        const angle = 270 + slotDeg * offset
+        const rad = (angle * Math.PI) / 180
+        const r = 46
+        return { left: 50 + r * Math.cos(rad), top: 50 - r * Math.sin(rad) }
+      }
+      const newCards = gameState.players
+        .filter(p => p.cardCount > 0)
+        .map((p, i) => {
+          const fromIdx = gameState.players.findIndex(pp => pp.id === p.id)
+          const toIdx = ((fromIdx + dir) % totalPlayers + totalPlayers) % totalPlayers
+          const from = positionFor(fromIdx)
+          const to = positionFor(toIdx)
+          return {
+            id: Date.now() + i + Math.random(),
+            startLeft: from.left,
+            startTop: from.top,
+            targetLeft: to.left,
+            targetTop: to.top,
+            delay: 0,
+            duration: 1200,
+          }
+        })
+      setFlyingCards(prev => [...prev, ...newCards])
     } else if (last.event === 'hands_swapped') {
       const players = gameState?.players ?? []
       const p1Name = players.find(p => p.id === last.playerId)?.name ?? '?'
       const p2Name = players.find(p => p.id === last.targetId)?.name ?? '?'
       setSwapAnim({ p1: p1Name, p2: p2Name })
-    }
-  }, [events, gameState?.players])
 
-  const clearDrawAnim = useCallback(() => setDrawAnim(null), [])
+      // Card-fly: cards swap between the two players (cross paths)
+      const myIdxLocal = gameState.players.findIndex(p => p.id === playerId)
+      const totalPlayers = gameState.players.length
+      const positionFor = (idx: number): { left: number; top: number } => {
+        if (idx === myIdxLocal) return { left: 50, top: 130 }
+        const offset = (idx - myIdxLocal + totalPlayers) % totalPlayers
+        const slotDeg = 360 / totalPlayers
+        const angle = 270 + slotDeg * offset
+        const rad = (angle * Math.PI) / 180
+        const r = 46
+        return { left: 50 + r * Math.cos(rad), top: 50 - r * Math.sin(rad) }
+      }
+      const aIdx = gameState.players.findIndex(p => p.id === last.playerId)
+      const bIdx = gameState.players.findIndex(p => p.id === last.targetId)
+      if (aIdx !== -1 && bIdx !== -1) {
+        const a = positionFor(aIdx)
+        const b = positionFor(bIdx)
+        const baseId = Date.now() + Math.random()
+        setFlyingCards(prev => [
+          ...prev,
+          { id: baseId, startLeft: a.left, startTop: a.top, targetLeft: b.left, targetTop: b.top, delay: 0, duration: 1200 },
+          { id: baseId + 1, startLeft: b.left, startTop: b.top, targetLeft: a.left, targetTop: a.top, delay: 0, duration: 1200 },
+        ])
+      }
+    } else if (last.event === 'turn_skipped' && gameState && last.card) {
+      const skippedIdx = gameState.players.findIndex(p => p.id === last.playerId)
+      if (skippedIdx !== -1) {
+        const myIdxLocal = gameState.players.findIndex(p => p.id === playerId)
+        const totalPlayers = gameState.players.length
+        // Every player (including self) is positioned on the circle line
+        const offset = (skippedIdx - myIdxLocal + totalPlayers) % totalPlayers
+        const slotDeg = 360 / totalPlayers
+        const angle = 270 + slotDeg * offset
+        const rad = (angle * Math.PI) / 180
+        const r = 46
+        const left = 50 + r * Math.cos(rad)
+        const top = 50 - r * Math.sin(rad)
+        setSkippedBubbles(prev => [...prev, { id: Date.now() + Math.random(), left, top, cardImage: last.card!.image }])
+      }
+    } else if (last.event === 'skip_everyone' && gameState && last.card) {
+      const myIdxLocal = gameState.players.findIndex(p => p.id === playerId)
+      const totalPlayers = gameState.players.length
+      const cardImage = last.card.image
+      const newBubbles: { id: number; left: number; top: number; cardImage: string }[] = []
+      gameState.players.forEach((p, idx) => {
+        if (p.id === last.playerId) return
+        if (p.cardCount === 0 || p.isEliminated) return
+        const offset = (idx - myIdxLocal + totalPlayers) % totalPlayers
+        const slotDeg = 360 / totalPlayers
+        const angle = 270 + slotDeg * offset
+        const rad = (angle * Math.PI) / 180
+        const r = 46
+        const left = 50 + r * Math.cos(rad)
+        const top = 50 - r * Math.sin(rad)
+        newBubbles.push({ id: Date.now() + idx + Math.random(), left, top, cardImage })
+      })
+      setSkippedBubbles(prev => [...prev, ...newBubbles])
+    } else if (last.event === 'emote' && gameState) {
+      // Compute angles for sender and next-player target on the circle
+      const senderIdx = gameState.players.findIndex(p => p.id === last.playerId)
+      if (senderIdx === -1) return
+      const myIdxLocal = gameState.players.findIndex(p => p.id === playerId)
+      const totalPlayers = gameState.players.length
+
+      // Same angle math as player layout — relative to viewer
+      function angleFor(idx: number): number {
+        if (idx === myIdxLocal) return 270
+        // offset from me, in turn direction
+        const offset = (idx - myIdxLocal + totalPlayers) % totalPlayers
+        const slotDeg = 360 / totalPlayers
+        return 270 + slotDeg * offset
+      }
+      // Next-in-turn from the sender (in current play direction)
+      const nextIdx = ((senderIdx + (gameState.direction ?? 1)) % totalPlayers + totalPlayers) % totalPlayers
+
+      const fromAngle = angleFor(senderIdx)
+      const toAngle = angleFor(nextIdx)
+      const id = Date.now() + Math.random()
+      setActiveEmotes(prev => [...prev, { id, emote: last.emote, fromAngle, toAngle }])
+    }
+  }, [events, gameState, playerId])
+
+  const removeEmote = useCallback((id: number) => {
+    setActiveEmotes(prev => prev.filter(e => e.id !== id))
+  }, [])
+
+  const clearDrawToast = useCallback(() => setDrawToast(null), [])
+  const removeFlyingCard = useCallback((id: number) => {
+    setFlyingCards(prev => prev.filter(c => c.id !== id))
+  }, [])
+  const removeSkippedBubble = useCallback((id: number) => {
+    setSkippedBubbles(prev => prev.filter(b => b.id !== id))
+  }, [])
   const clearPassAnim = useCallback(() => setPassAnim(null), [])
   const clearSwapAnim = useCallback(() => setSwapAnim(null), [])
 
   if (!gameState) return null
 
   const isLobby = gameState.phase === 'lobby'
-  const isPlaying = gameState.phase === 'playing'
   const isEnded = gameState.phase === 'ended'
+  const isPlaying = gameState.phase === 'playing' || isEnded // keep showing the table when ended
   const isHost = gameState.players[0]?.id === playerId
   // Use playerId from store, fall back to localStorage rejoinToken for mid-rejoin renders
   const effectivePlayerId = playerId ?? localStorage.getItem('rejoinToken')
@@ -319,7 +571,7 @@ export default function Table() {
 
   // Arrange other players in turn order starting from next after me
   const playerCount = gameState.players.length
-  const orderedOthers: { id: string; name: string; cardCount: number; connected: boolean; isEliminated: boolean; originalIndex: number }[] = []
+  const orderedOthers: { id: string; name: string; cardCount: number; connected: boolean; isEliminated: boolean; finishRank: number | null; originalIndex: number }[] = []
   for (let offset = 1; offset < playerCount; offset++) {
     const idx = (myIndex + offset) % playerCount
     const p = gameState.players[idx]
@@ -351,10 +603,23 @@ export default function Table() {
           {error}
         </div>
       )}
-      {drawAnim && <DrawAnimation count={drawAnim.count} onDone={clearDrawAnim} />}
+      {drawToast && <DrawToast count={drawToast.count} name={drawToast.name} onDone={clearDrawToast} />}
       {passAnim && <PassAnimation direction={passAnim.direction} onDone={clearPassAnim} />}
       {swapAnim && <SwapAnimation p1={swapAnim.p1} p2={swapAnim.p2} onDone={clearSwapAnim} />}
       {showColorPicker && <ColorPicker onPick={pickColor} />}
+      {showEmotePicker && <EmotePicker onPick={sendEmote} onClose={() => setShowEmotePicker(false)} />}
+
+      {/* Emote button — fixed bottom-right, above hand */}
+      {isPlaying && (
+        <button
+          type="button"
+          onClick={() => setShowEmotePicker(true)}
+          className="fixed bottom-4 right-4 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-purple-700 hover:bg-purple-600 active:scale-95 shadow-xl flex items-center justify-center text-2xl border-2 border-purple-400 transition-all"
+          title="Send emote"
+        >
+          😂
+        </button>
+      )}
 
       {showSwapPicker && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -419,15 +684,27 @@ export default function Table() {
         </div>
       )}
 
-      {/* Game Over */}
+      {/* Game Over Overlay (over the live game state) */}
       {isEnded && (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4">
-          <h2 className="text-3xl font-black">Game Over!</h2>
-          <p className="text-xl">
-            Winner: <span className="text-yellow-400 font-bold">
-              {gameState.players.find(p => p.id === gameState.winner)?.name ?? '?'}
-            </span>
-          </p>
+        <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+          <div className="bg-gray-900 border-4 border-yellow-400 rounded-2xl px-8 py-6 shadow-2xl pointer-events-auto animate-fade-in">
+            <div className="text-center">
+              <div className="text-5xl mb-3">🏆</div>
+              <h2 className="text-2xl sm:text-3xl font-black mb-2">Game Over!</h2>
+              <p className="text-lg sm:text-xl mb-4">
+                Winner: <span className="text-yellow-400 font-black text-2xl">
+                  {gameState.players.find(p => p.id === gameState.winner)?.name ?? '?'}
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={logout}
+                className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-bold transition-colors"
+              >
+                Back to Lobby
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -445,6 +722,43 @@ export default function Table() {
                 <DirectionArrow direction={gameState.direction} />
               </div>
 
+              {/* Floating emotes */}
+              {activeEmotes.map(e => (
+                <FloatingEmote
+                  key={e.id}
+                  emote={e.emote}
+                  fromAngle={e.fromAngle}
+                  toAngle={e.toAngle}
+                  direction={gameState.direction}
+                  onDone={() => removeEmote(e.id)}
+                />
+              ))}
+
+              {/* Flying cards (draw pile, hand pass, hand swap) */}
+              {flyingCards.map(c => (
+                <FlyingCard
+                  key={c.id}
+                  startLeft={c.startLeft}
+                  startTop={c.startTop}
+                  targetLeft={c.targetLeft}
+                  targetTop={c.targetTop}
+                  delay={c.delay}
+                  duration={c.duration}
+                  onDone={() => removeFlyingCard(c.id)}
+                />
+              ))}
+
+              {/* Semi-transparent skip-card overlay on skipped players */}
+              {skippedBubbles.map(b => (
+                <SkippedOverlay
+                  key={b.id}
+                  left={b.left}
+                  top={b.top}
+                  cardImage={b.cardImage}
+                  onDone={() => removeSkippedBubble(b.id)}
+                />
+              ))}
+
               {/* Other players equally spaced */}
               {otherPlayers.map((p, i) => {
                 const angleDeg = getPlayerAngle(i, otherPlayers.length)
@@ -460,6 +774,7 @@ export default function Table() {
                       name={p.name} cardCount={p.cardCount}
                       isCurrentTurn={gameState.turnIndex === p.originalIndex}
                       isSelf={false} connected={p.connected} isEliminated={p.isEliminated}
+                      finishRank={p.finishRank ?? null}
                       isCallable={unoCallable.includes(p.id)}
                       onChallenge={unoCallable.includes(p.id) ? () => challengeUno(p.id) : undefined}
                       showSwapButton={showSwapPicker}
@@ -514,6 +829,7 @@ export default function Table() {
                       isSelf={true}
                       connected={myPlayer.connected}
                       isEliminated={myPlayer.isEliminated}
+                      finishRank={myPlayer.finishRank ?? null}
                       isCallable={false}
                     />
                   </div>

@@ -56,6 +56,8 @@ export function initGame(code: string, players: Pick<Player, 'id' | 'name'>[]): 
     hand: hands[i],
     connected: true,
     lastSeen: Date.now(),
+    finishRank: null,
+    eliminated: false,
   }))
 
   // Find first card for discard pile that is a simple number card
@@ -135,14 +137,14 @@ export function canPlay(card: Card, state: GameState): boolean {
 function checkMercy(state: GameState): GameEvent[] {
   const events: GameEvent[] = []
   for (const p of state.players) {
-    if (p.hand.length >= MERCY_LIMIT) {
-      // Eliminated — set aside hand (PDF: "Set aside their hand until deck needs reshuffle")
+    if (!p.eliminated && p.finishRank === null && p.hand.length >= MERCY_LIMIT) {
+      // Eliminated by mercy rule — show X
       state.deck.push(...p.hand)
       p.hand = []
+      p.eliminated = true
       state.deck = shuffle(state.deck)
       events.push({ event: 'eliminated', playerId: p.id })
 
-      // If it's the eliminated player's turn, advance past them
       const elimIdx = state.players.indexOf(p)
       if (state.turnIndex === elimIdx) {
         state.turnIndex = nextAliveIndex(state, state.turnIndex)
@@ -155,22 +157,39 @@ function checkMercy(state: GameState): GameEvent[] {
 // ── Check for winner ─────────────────────────────────────────────
 
 function checkWinner(state: GameState): GameEvent | null {
-  const alive = state.players.filter(p => p.hand.length > 0)
-  if (alive.length <= 1) {
-    const winner = alive[0] ?? state.players.find(p => p.hand.length === 0)
-    if (winner) {
-      state.winner = winner.id
-      state.phase = 'ended'
-      return { event: 'player_won', playerId: winner.id }
+  // Step 1: assign finishRank to anyone with empty hand who isn't ranked yet and isn't eliminated
+  const nextRank = () => state.players.filter(p => p.finishRank !== null).length + 1
+  let firstFinisher: Player | null = null
+  for (const p of state.players) {
+    if (p.hand.length === 0 && p.finishRank === null && !p.eliminated) {
+      p.finishRank = nextRank()
+      if (!firstFinisher && p.finishRank === 1) firstFinisher = p
     }
   }
-  // Also: if current player empties hand
-  const cp = currentPlayer(state)
-  if (cp.hand.length === 0) {
-    state.winner = cp.id
+
+  // Step 2: game ends when only 1 player still has cards (or zero — fully resolved)
+  const stillPlaying = state.players.filter(p => p.hand.length > 0 && !p.eliminated)
+  if (stillPlaying.length <= 1) {
+    // Last player gets the next rank too (if any cards left)
+    if (stillPlaying.length === 1 && stillPlaying[0].finishRank === null) {
+      stillPlaying[0].finishRank = nextRank()
+    }
     state.phase = 'ended'
-    return { event: 'player_won', playerId: cp.id }
+    // Winner = whoever finished first (rank 1)
+    const winner = state.players.find(p => p.finishRank === 1) ?? firstFinisher ?? null
+    if (winner && state.winner !== winner.id) {
+      state.winner = winner.id
+      return { event: 'player_won', playerId: winner.id }
+    }
+  } else if (firstFinisher) {
+    // Game continues, but advance turn if the first finisher was the current player
+    const cpIdx = state.turnIndex
+    if (state.players[cpIdx].hand.length === 0) {
+      state.turnIndex = nextAliveIndex(state, state.turnIndex)
+    }
+    return { event: 'player_won', playerId: firstFinisher.id } // celebrate but don't end game
   }
+
   return null
 }
 
@@ -255,7 +274,7 @@ export function playCard(
     }
 
     case 'skip': {
-      events.push({ event: 'turn_skipped', playerId: state.players[nextAliveIndex(state, state.turnIndex)].id })
+      events.push({ event: 'turn_skipped', playerId: state.players[nextAliveIndex(state, state.turnIndex)].id, card })
       advanceTurn(state, 1) // skip one player
       break
     }
@@ -292,7 +311,7 @@ export function playCard(
 
     case 'skip_all': {
       // Skip Everyone: skip all others, current player goes again
-      events.push({ event: 'skip_everyone', playerId })
+      events.push({ event: 'skip_everyone', playerId, card })
       // Don't advance — same player goes again
       break
     }
@@ -502,7 +521,8 @@ export function getPublicState(state: GameState): import('../shared/types.js').P
       name: p.name,
       cardCount: p.hand.length,
       connected: p.connected,
-      isEliminated: p.hand.length === 0 && state.phase === 'playing' && state.winner !== p.id,
+      isEliminated: p.eliminated,
+      finishRank: p.finishRank,
     })),
     topDiscard: state.discard[state.discard.length - 1] ?? null,
     recentDiscard,

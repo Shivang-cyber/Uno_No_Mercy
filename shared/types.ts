@@ -27,6 +27,8 @@ export interface Player {
   hand: Card[]
   connected: boolean
   lastSeen: number
+  finishRank: number | null  // set when player empties hand: 1 (first to finish), 2, etc.
+  eliminated: boolean        // true if removed via mercy rule (25+ cards)
 }
 
 // ── Game State ───────────────────────────────────────────────────
@@ -73,6 +75,7 @@ export type ClientMessage =
   | { type: 'SWAP_PICK'; targetId: string }  // after playing a 7
   | { type: 'ROULETTE_COLOR'; color: Color } // roulette target picks a color to draw until
   | { type: 'KICK_VOTE'; targetId: string }  // vote to kick an offline player
+  | { type: 'EMOTE'; emote: string }  // send an emote (broadcast to all)
 
 // ── Messages: Server → Client ────────────────────────────────────
 
@@ -95,7 +98,8 @@ export interface PublicPlayerInfo {
   name: string
   cardCount: number
   connected: boolean
-  isEliminated: boolean
+  isEliminated: boolean   // mercy rule (25+ cards) — show X
+  finishRank: number | null  // 1, 2, 3... if they finished their hand. null if still playing or eliminated
 }
 
 export interface PublicGameState {
@@ -122,7 +126,7 @@ export interface PublicGameState {
 export type GameEvent =
   | { event: 'card_played'; playerId: string; card: Card }
   | { event: 'cards_drawn'; playerId: string; count: number }
-  | { event: 'turn_skipped'; playerId: string }
+  | { event: 'turn_skipped'; playerId: string; card?: Card }
   | { event: 'direction_reversed' }
   | { event: 'color_chosen'; color: Color }
   | { event: 'uno_called'; playerId: string }
@@ -130,7 +134,8 @@ export type GameEvent =
   | { event: 'hands_passed'; direction: Direction }
   | { event: 'hands_swapped'; playerId: string; targetId: string }
   | { event: 'discard_all'; playerId: string; color: Color; count: number }
-  | { event: 'skip_everyone'; playerId: string }
+  | { event: 'skip_everyone'; playerId: string; card?: Card }
   | { event: 'roulette'; targetId: string; chosenColor: Color; cardsDrawn: number }
   | { event: 'eliminated'; playerId: string }
   | { event: 'player_won'; playerId: string }
+  | { event: 'emote'; playerId: string; emote: string }
