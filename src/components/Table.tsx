@@ -4,6 +4,7 @@ import type { Color, Card as CardType } from '../../shared/types'
 import Card from './Card'
 import Hand from './Hand'
 import ColorPicker from './ColorPicker'
+import RulesModal, { RulesButton } from './RulesModal'
 import EmotePicker, { FloatingEmote } from './EmotePicker'
 
 // ── Direction arrow ──────────────────────────────────────────────
@@ -375,6 +376,7 @@ export default function Table() {
   const [swapAnim, setSwapAnim] = useState<{ p1: string; p2: string } | null>(null)
   const [scores] = useState<Record<string, number>>({})
   const [showEmotePicker, setShowEmotePicker] = useState(false)
+  const [showRules, setShowRules] = useState(false)
   const [activeEmotes, setActiveEmotes] = useState<{ id: number; emote: string; fromAngle: number; toAngle: number }[]>([])
   const events = useStore(s => s.events)
 
@@ -623,6 +625,10 @@ export default function Table() {
           😂
         </button>
       )}
+
+      {/* Rules button + modal — visible on lobby and during game */}
+      <RulesButton onClick={() => setShowRules(true)} position="bottom-left" />
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
       {showSwapPicker && (
         <div className="fixed inset-0 bg-ink-900/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
