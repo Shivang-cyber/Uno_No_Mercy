@@ -1,20 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from './store'
 import Lobby from './components/Lobby'
 import Table from './components/Table'
+import SplashScreen, { hasSeenSplash } from './components/SplashScreen'
 
 export default function App() {
   const { gameState, init } = useStore()
+  const [showSplash, setShowSplash] = useState(() => !hasSeenSplash())
 
   useEffect(() => {
     init()
   }, [init])
 
-  // If we have a game state (lobby or playing), show the table
-  if (gameState) {
-    return <Table />
-  }
-
-  // Otherwise show lobby/join screen
-  return <Lobby />
+  return (
+    <>
+      {showSplash && <SplashScreen onDismiss={() => setShowSplash(false)} />}
+      {gameState ? <Table /> : <Lobby />}
+    </>
+  )
 }
