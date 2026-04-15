@@ -335,10 +335,27 @@ export class Room {
         this.disconnectTimers.set(conn.playerId, timer)
       }
     } else {
-      // In lobby — just remove
+      // In lobby — check if the leaver is the host
+      const wasHost = this.lobby[0]?.id === conn.playerId
       this.lobby = this.lobby.filter(p => p.id !== conn.playerId)
-      this.broadcastLobby()
+
+      if (wasHost && this.lobby.length > 0) {
+        // Host left — close the room for everyone
+        this.closeRoom('Host left the room')
+      } else {
+        this.broadcastLobby()
+      }
     }
+  }
+
+  private closeRoom(reason: string) {
+    for (const conn of this.connections) {
+      this.send(conn.ws, { type: 'ROOM_CLOSED', reason })
+    }
+    // Clear state so subsequent JOINs fail cleanly
+    this.lobby = []
+    this.state = null
+    this.connections = []
   }
 
   get isEmpty(): boolean {

@@ -154,9 +154,9 @@ function DrawToast({ count, name, onDone }: { count: number; name: string; onDon
 
   return (
     <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
-      <div className="bg-black/60 rounded-2xl px-6 py-3 backdrop-blur-sm animate-fade-in">
-        <div className="text-2xl font-black text-red-400 text-center">+{count}</div>
-        <div className="text-xs text-gray-300 text-center mt-1">{name} draws</div>
+      <div className="glass rounded-2xl px-6 py-3 animate-fade-in">
+        <div className="font-display text-3xl font-black text-center bg-gradient-to-r from-sunset-300 to-sunset-500 bg-clip-text text-transparent">+{count}</div>
+        <div className="text-xs text-lotus-200/70 text-center mt-1 tracking-wider">{name} draws</div>
       </div>
     </div>
   )
@@ -168,9 +168,9 @@ function PassAnimation({ direction, onDone }: { direction: 1 | -1; onDone: () =>
   useEffect(() => { const t = setTimeout(onDone, 1800); return () => clearTimeout(t) }, [onDone])
   return (
     <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
-      <div className="bg-black/60 rounded-2xl px-8 py-5 backdrop-blur-sm flex flex-col items-center animate-fade-in">
-        <div className={`text-4xl mb-2 ${direction === 1 ? '' : 'scale-x-[-1]'}`}>&#x21BB;</div>
-        <div className="text-lg font-bold text-yellow-300">Hands passed {direction === 1 ? 'clockwise' : 'counter-clockwise'}!</div>
+      <div className="glass rounded-2xl px-8 py-5 flex flex-col items-center animate-fade-in">
+        <div className={`text-5xl mb-2 text-lotus-300 ${direction === 1 ? '' : 'scale-x-[-1]'}`}>&#x21BB;</div>
+        <div className="font-display text-lg font-bold text-sunset-300">Hands passed {direction === 1 ? 'clockwise' : 'counter-clockwise'}</div>
       </div>
     </div>
   )
@@ -180,9 +180,9 @@ function SwapAnimation({ p1, p2, onDone }: { p1: string; p2: string; onDone: () 
   useEffect(() => { const t = setTimeout(onDone, 1800); return () => clearTimeout(t) }, [onDone])
   return (
     <div className="fixed inset-0 pointer-events-none z-30 flex items-center justify-center">
-      <div className="bg-black/60 rounded-2xl px-8 py-5 backdrop-blur-sm flex flex-col items-center animate-fade-in">
-        <div className="text-4xl mb-2">&#x21C4;</div>
-        <div className="text-lg font-bold text-purple-300">{p1} swapped hands with {p2}!</div>
+      <div className="glass rounded-2xl px-8 py-5 flex flex-col items-center animate-fade-in">
+        <div className="text-5xl mb-2 text-lotus-300">&#x21C4;</div>
+        <div className="font-display text-lg font-bold text-lotus-200">{p1} swapped hands with {p2}</div>
       </div>
     </div>
   )
@@ -242,30 +242,33 @@ function PlayerBubble({
 }) {
   const finished = finishRank !== null
   const rankLabel = finishRank ? toOrdinal(finishRank) : null
-  const rankBg = finishRank === 1 ? 'bg-yellow-500' : finishRank === 2 ? 'bg-gray-400' : finishRank === 3 ? 'bg-orange-700' : 'bg-emerald-700'
+  const rankBg = finishRank === 1 ? 'bg-gradient-to-br from-sunset-300 to-sunset-500'
+    : finishRank === 2 ? 'bg-gradient-to-br from-lotus-300 to-lotus-500'
+    : finishRank === 3 ? 'bg-gradient-to-br from-sunset-400 to-sunset-500'
+    : 'bg-gradient-to-br from-mint-400 to-mint-500'
 
   return (
     <div className="flex flex-col items-center gap-0.5">
       <div
         className={`
           w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center
-          text-lg sm:text-xl font-black transition-all duration-300
-          ${isCurrentTurn && !finished && !isEliminated ? 'ring-3 ring-yellow-400 bg-yellow-600 scale-110' : ''}
-          ${finished ? `${rankBg} ring-2 ring-white/40` : ''}
-          ${!finished && !isCurrentTurn && !isEliminated ? 'bg-gray-700' : ''}
+          font-display text-lg sm:text-xl font-black transition-all duration-300
+          ${isCurrentTurn && !finished && !isEliminated ? 'bg-warm-gradient scale-110 glow-warm' : ''}
+          ${finished ? `${rankBg} ring-2 ring-white/40 shadow-lg` : ''}
+          ${!finished && !isCurrentTurn && !isEliminated ? 'bg-ink-600/80 border border-white/10' : ''}
           ${!connected && !finished ? 'opacity-40' : ''}
-          ${isEliminated ? 'opacity-30 bg-red-900' : ''}
-          ${isSelf ? 'ring-2 ring-cyan-400' : ''}
-          ${cardCount === 1 && !isEliminated && !finished ? 'text-red-400 animate-pulse' : 'text-white'}
+          ${isEliminated ? 'opacity-30 bg-sunset-500/30 border border-sunset-400/30' : ''}
+          ${isSelf ? 'ring-2 ring-mint-400' : ''}
+          ${cardCount === 1 && !isEliminated && !finished ? 'text-sunset-300 animate-soft-pulse' : 'text-white'}
         `}
       >
         {isEliminated ? 'X' : finished ? rankLabel : cardCount}
       </div>
-      <span className={`text-[10px] sm:text-xs font-semibold truncate max-w-[60px] ${isSelf ? 'text-cyan-300' : 'text-gray-300'}`}>
+      <span className={`text-[10px] sm:text-xs font-semibold truncate max-w-[60px] ${isSelf ? 'text-mint-400' : 'text-lotus-200/80'}`}>
         {name}
       </span>
-      {cardCount === 1 && !isEliminated && <span className="text-[9px] font-black text-red-400">UNO!</span>}
-      {!connected && <span className="text-[8px] text-yellow-500">offline</span>}
+      {cardCount === 1 && !isEliminated && <span className="text-[9px] font-display font-black text-sunset-400 tracking-widest">UNO!</span>}
+      {!connected && <span className="text-[9px] text-sunset-300/80">offline</span>}
       {isCallable && onChallenge && (
         <button type="button" onClick={onChallenge}
           className="px-2 py-0.5 bg-red-600 hover:bg-red-500 rounded text-[9px] font-black animate-pulse">
@@ -304,40 +307,40 @@ function Scoreboard({ players, scores, onLogout }: {
       onMouseLeave={() => setOpen(false)}
     >
       <div
-        className="bg-gray-800/90 border border-gray-600 rounded-r-lg cursor-pointer"
+        className="glass rounded-r-2xl cursor-pointer"
         onClick={() => setOpen(!open)}
       >
         {!open && (
-          <div className="py-3 px-1 text-[10px] font-bold text-gray-400"
+          <div className="py-3 px-1 text-[10px] font-display font-black text-lotus-300/70 tracking-[0.3em]"
             style={{ writingMode: 'vertical-rl' }}>
             SCORE
           </div>
         )}
         {open && (
-          <div className="p-3">
-            <h3 className="font-bold text-sm mb-2 text-gray-200">Scoreboard</h3>
+          <div className="p-4">
+            <h3 className="font-display font-black text-sm mb-3 text-lotus-200 tracking-wide">Scoreboard</h3>
             <div className="space-y-1.5 mb-3">
               {players.map(p => (
-                <div key={p.id} className={`flex justify-between text-xs ${p.isEliminated ? 'text-red-400 line-through' : 'text-gray-300'}`}>
+                <div key={p.id} className={`flex justify-between text-xs ${p.isEliminated ? 'text-sunset-400/70 line-through' : 'text-lotus-100'}`}>
                   <span className="truncate max-w-[120px]">{p.name}</span>
-                  <span className="font-mono font-bold">{scores[p.id] ?? 0}</span>
+                  <span className="font-display font-black text-lotus-300">{scores[p.id] ?? 0}</span>
                 </div>
               ))}
             </div>
-            <hr className="border-gray-600 mb-2" />
-            <h4 className="font-bold text-[10px] text-gray-400 mb-1">SCORING</h4>
-            <div className="text-[9px] text-gray-500 space-y-0.5">
-              <div>0-9: Face value</div>
-              <div>Skip, Reverse, +2, +4, Discard, Skip All: <b>20</b></div>
-              <div>Wild Reverse +4, Wild +6, +10, Roulette: <b>50</b></div>
-              <div>Knockout bonus: <b>250</b></div>
-              <div className="mt-1 text-gray-400">First to <b>1000</b> wins!</div>
+            <hr className="border-white/10 mb-2" />
+            <h4 className="font-display font-bold text-[10px] text-lotus-300/70 tracking-widest mb-1">SCORING</h4>
+            <div className="text-[10px] text-lotus-300/60 space-y-0.5">
+              <div>0–9: Face value</div>
+              <div>Skip, Reverse, +2, +4, Discard, Skip All: <b className="text-lotus-200">20</b></div>
+              <div>Wild +4/+6/+10, Roulette: <b className="text-lotus-200">50</b></div>
+              <div>Knockout bonus: <b className="text-lotus-200">250</b></div>
+              <div className="mt-1 text-sunset-300/80">First to <b>1000</b> wins!</div>
             </div>
-            <hr className="border-gray-600 my-2" />
+            <hr className="border-white/10 my-3" />
             <button
               type="button"
               onClick={onLogout}
-              className="w-full py-1.5 bg-red-800 hover:bg-red-700 rounded text-xs font-bold transition-colors"
+              className="w-full py-2 bg-sunset-500/15 hover:bg-sunset-500/30 border border-sunset-500/30 rounded-lg text-xs font-display font-bold text-sunset-200 transition-all"
             >
               Leave Game
             </button>
@@ -596,10 +599,10 @@ export default function Table() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-gray-900">
+    <div className="relative min-h-[100dvh] flex flex-col">
       {/* Overlays */}
       {error && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-900/90 text-red-200 px-4 py-2 rounded-lg text-sm z-40 animate-fade-in">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 glass border border-sunset-500/40 text-sunset-200 px-4 py-2 rounded-xl text-sm z-40 animate-fade-in">
           {error}
         </div>
       )}
@@ -614,7 +617,7 @@ export default function Table() {
         <button
           type="button"
           onClick={() => setShowEmotePicker(true)}
-          className="fixed bottom-4 right-4 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-purple-700 hover:bg-purple-600 active:scale-95 shadow-xl flex items-center justify-center text-2xl border-2 border-purple-400 transition-all"
+          className="fixed bottom-4 right-4 z-40 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-lotus-400 to-lotus-500 hover:scale-110 active:scale-95 shadow-glow-lotus flex items-center justify-center text-2xl border border-white/20 transition-all"
           title="Send emote"
         >
           😂
@@ -622,16 +625,16 @@ export default function Table() {
       )}
 
       {showSwapPicker && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-bold text-center mb-4">Pick a player to swap hands with</h3>
+        <div className="fixed inset-0 bg-ink-900/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="glass rounded-2xl p-6 max-w-sm w-full">
+            <h3 className="font-display text-lg font-black text-center mb-4 text-lotus-200">Pick a hand to swap</h3>
             <div className="space-y-2">
               {gameState.players
                 .filter(p => p.id !== effectivePlayerId && !p.isEliminated && p.cardCount > 0)
                 .map(p => (
                   <button type="button" key={p.id} onClick={() => pickSwapTarget(p.id)}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold transition-colors">
-                    {p.name} ({p.cardCount} cards)
+                    className="w-full py-3 bg-gradient-to-r from-lotus-500 to-lotus-400 hover:scale-[1.02] rounded-xl font-display font-bold transition-all shadow-glow-lotus">
+                    {p.name} <span className="text-white/70 font-normal">· {p.cardCount} cards</span>
                   </button>
                 ))}
             </div>
@@ -640,9 +643,9 @@ export default function Table() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 sm:px-6 py-1.5 bg-gray-800/90 border-b border-gray-700 shrink-0">
+      <div className="relative z-10 flex items-center justify-between px-3 sm:px-6 py-2 glass-soft border-b border-white/5 shrink-0">
         <div className="text-sm">
-          Room: <span className="font-mono font-bold text-cyan-400 text-lg">{gameState.code}</span>
+          <span className="text-lotus-300/60">Room</span> <span className="font-display font-black text-lotus-300 text-lg tracking-wider">{gameState.code}</span>
         </div>
         <div className="flex items-center gap-2">
           {gameState.activeColor && (
@@ -668,38 +671,44 @@ export default function Table() {
           <h2 className="text-2xl font-bold">Waiting for players...</h2>
           <div className="flex flex-wrap gap-3 justify-center">
             {gameState.players.map((p, i) => (
-              <div key={p.id} className="bg-gray-800 px-4 py-2 rounded-lg">
+              <div key={p.id} className="glass-soft px-4 py-2 rounded-xl">
                 <span className="font-bold">{p.name}</span>
-                {i === 0 && <span className="text-yellow-400 text-xs ml-2">HOST</span>}
+                {i === 0 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-sunset-500/20 text-sunset-300 font-black tracking-wider">HOST</span>}
               </div>
             ))}
           </div>
           <p className="text-gray-400 text-sm">{gameState.players.length}/10 players</p>
           {isHost && gameState.players.length >= 2 && (
             <button type="button" onClick={startGame}
-              className="px-8 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-bold text-lg transition-colors">
+              className="px-8 py-3 bg-warm-gradient rounded-xl font-display font-bold text-lg shadow-glow-sunset hover:scale-[1.03] active:scale-[0.98] transition-all">
               Start Game
             </button>
           )}
+          <button type="button" onClick={logout}
+            className="mt-3 px-5 py-2 bg-ink-600/50 hover:bg-sunset-500/30 border border-white/10 hover:border-sunset-400/40 rounded-xl text-sm font-semibold text-lotus-200 hover:text-white transition-all">
+            {isHost ? '✕ Close Room & Leave' : '← Leave Room'}
+          </button>
+          {isHost && <p className="text-[11px] text-lotus-300/40 -mt-1">If you leave, everyone will be kicked.</p>}
         </div>
       )}
 
       {/* Game Over Overlay (over the live game state) */}
       {isEnded && (
-        <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
-          <div className="bg-gray-900 border-4 border-yellow-400 rounded-2xl px-8 py-6 shadow-2xl pointer-events-auto animate-fade-in">
+        <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-ink-900/75 backdrop-blur-md pointer-events-none">
+          <div className="glass rounded-3xl px-10 py-8 pointer-events-auto animate-fade-in shadow-glow-sunset">
             <div className="text-center">
-              <div className="text-5xl mb-3">🏆</div>
-              <h2 className="text-2xl sm:text-3xl font-black mb-2">Game Over!</h2>
-              <p className="text-lg sm:text-xl mb-4">
-                Winner: <span className="text-yellow-400 font-black text-2xl">
+              <div className="text-6xl mb-4 animate-float">🏆</div>
+              <h2 className="font-display text-2xl sm:text-3xl font-black mb-3 text-lotus-100 tracking-wide">Game Over</h2>
+              <p className="text-lg sm:text-xl mb-5 text-lotus-200/80">
+                Winner:{' '}
+                <span className="font-display bg-gradient-to-r from-sunset-300 to-sunset-500 bg-clip-text text-transparent font-black text-2xl">
                   {gameState.players.find(p => p.id === gameState.winner)?.name ?? '?'}
                 </span>
               </p>
               <button
                 type="button"
                 onClick={logout}
-                className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-bold transition-colors"
+                className="px-7 py-2.5 bg-warm-gradient rounded-xl font-display font-bold shadow-glow-sunset hover:scale-105 transition-all"
               >
                 Back to Lobby
               </button>
@@ -841,13 +850,13 @@ export default function Table() {
           {/* Turn indicator */}
           <div className="text-center py-1 text-sm shrink-0 relative z-10 -mb-4">
             {isMyTurn ? (
-              <span className="text-yellow-400 font-bold animate-pulse">
+              <span className="font-display font-black tracking-wide animate-soft-pulse bg-gradient-to-r from-sunset-300 to-lotus-300 bg-clip-text text-transparent">
                 {isMyRoulette
-                  ? `Roulette! Keep drawing until you get ${gameState.activeColor?.toUpperCase()}!`
-                  : 'Your turn!'}
+                  ? `Roulette! Draw until you get ${gameState.activeColor?.toUpperCase()}`
+                  : 'Your turn'}
               </span>
             ) : (
-              <span className="text-gray-400">{gameState.players[gameState.turnIndex]?.name}'s turn</span>
+              <span className="text-lotus-200/60">{gameState.players[gameState.turnIndex]?.name}'s turn</span>
             )}
           </div>
 
@@ -856,8 +865,8 @@ export default function Table() {
             {(hand.length <= 2 && hand.length > 0 || iAmCallable) && (
               <div className="flex justify-center pt-2">
                 <button type="button" onClick={callUno}
-                  className={`px-8 py-2 rounded-full font-black text-lg shadow-lg transition-all
-                    ${iAmCallable ? 'bg-red-600 hover:bg-red-500 animate-bounce ring-2 ring-red-400' : 'bg-red-700 hover:bg-red-600'}
+                  className={`px-8 py-2 rounded-full font-display font-black text-lg tracking-widest shadow-soft transition-all
+                    ${iAmCallable ? 'bg-warm-gradient animate-bounce glow-warm' : 'bg-gradient-to-r from-sunset-500 to-sunset-400 hover:scale-105'}
                   `}>
                   UNO!
                 </button>

@@ -136,14 +136,14 @@ export default function EmotePicker({ onPick, onClose }: {
         aria-label="Close"
       />
 
-      <div className="fixed z-[70] left-1/2 -translate-x-1/2 bottom-20 sm:bottom-24 bg-gray-800 rounded-2xl p-4 max-w-md w-[min(95vw,420px)] border border-gray-600 shadow-2xl">
+      <div className="fixed z-[70] left-1/2 -translate-x-1/2 bottom-20 sm:bottom-24 glass rounded-2xl p-4 max-w-md w-[min(95vw,420px)] shadow-soft">
         {/* Tabs */}
-        <div className="flex gap-1 mb-3 bg-gray-900 p-1 rounded-lg">
+        <div className="flex gap-1 mb-3 bg-ink-900/60 p-1 rounded-xl">
           <button
             type="button"
             onClick={() => setTab('emoji')}
-            className={`flex-1 py-1.5 rounded text-sm font-semibold transition-colors ${
-              tab === 'emoji' ? 'bg-purple-700 text-white' : 'text-gray-400 hover:text-white'
+            className={`flex-1 py-1.5 rounded-lg text-sm font-display font-bold transition-all ${
+              tab === 'emoji' ? 'bg-gradient-to-r from-lotus-500 to-lotus-400 text-white shadow-glow-lotus' : 'text-lotus-300/70 hover:text-white'
             }`}
           >
             Emoji
@@ -151,8 +151,8 @@ export default function EmotePicker({ onPick, onClose }: {
           <button
             type="button"
             onClick={() => setTab('gif')}
-            className={`flex-1 py-1.5 rounded text-sm font-semibold transition-colors ${
-              tab === 'gif' ? 'bg-purple-700 text-white' : 'text-gray-400 hover:text-white'
+            className={`flex-1 py-1.5 rounded-lg text-sm font-display font-bold transition-all ${
+              tab === 'gif' ? 'bg-gradient-to-r from-lotus-500 to-lotus-400 text-white shadow-glow-lotus' : 'text-lotus-300/70 hover:text-white'
             }`}
           >
             GIFs
@@ -166,7 +166,7 @@ export default function EmotePicker({ onPick, onClose }: {
                 key={emote}
                 type="button"
                 onClick={() => handlePick(emote)}
-                className="text-3xl sm:text-4xl p-2 hover:bg-gray-700 rounded-lg transition-colors active:scale-95"
+                className="text-3xl sm:text-4xl p-2 hover:bg-lotus-500/20 rounded-lg transition-all active:scale-95"
               >
                 {emote}
               </button>
@@ -181,7 +181,7 @@ export default function EmotePicker({ onPick, onClose }: {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search GIFs (tease, laugh, ...)"
-              className="w-full mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-purple-400"
+              className="w-full mb-2 px-3 py-2 bg-ink-900/60 border border-white/10 rounded-xl text-sm placeholder-lotus-300/40 focus:outline-none focus:ring-2 focus:ring-lotus-400/40 focus:border-lotus-400/30 transition-all"
             />
             {loading && <div className="text-xs text-gray-500 text-center py-2">Searching...</div>}
             {errorMsg && (
@@ -195,7 +195,7 @@ export default function EmotePicker({ onPick, onClose }: {
                   key={gif.id}
                   type="button"
                   onClick={() => handlePick(gif.url)}
-                  className="aspect-square rounded-lg overflow-hidden bg-gray-700 hover:ring-2 hover:ring-purple-400 active:scale-95 transition-all"
+                  className="aspect-square rounded-lg overflow-hidden bg-ink-700/60 hover:ring-2 hover:ring-lotus-400 active:scale-95 transition-all"
                   title={gif.label}
                 >
                   <img src={gif.url} alt={gif.label} className="w-full h-full object-cover" loading="lazy" />

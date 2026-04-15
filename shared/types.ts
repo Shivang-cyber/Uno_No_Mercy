@@ -90,6 +90,7 @@ export type ServerMessage =
   | { type: 'PICK_COLOR' }          // server asks player to pick color (after wild, client-side only now)
   | { type: 'PICK_ROULETTE_COLOR' } // server asks roulette target to pick a color
   | { type: 'ELIMINATED'; playerId: string; reason: string }
+  | { type: 'ROOM_CLOSED'; reason: string }
 
 // ── Public Game State (sent to all, no hidden hands) ─────────────
 

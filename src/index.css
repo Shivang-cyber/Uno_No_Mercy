@@ -1,37 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Outfit:wght@500;700;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Card fly-in animation for draw events */
-@keyframes card-fly {
-  0% {
-    opacity: 0;
-    transform: translateY(-80px) scale(0.5) rotate(-20deg);
-  }
-  40% {
-    opacity: 1;
-    transform: translateY(0) scale(1.1) rotate(5deg);
-  }
-  70% {
-    transform: translateY(10px) scale(1) rotate(-2deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(60px) scale(0.8) rotate(0deg);
-  }
+/* Global base: chill night-sky */
+body {
+  background: radial-gradient(ellipse 80% 70% at 50% 0%, #241a3f 0%, #130d26 45%, #0a0616 100%);
+  background-attachment: fixed;
+  font-family: 'Nunito', ui-sans-serif, system-ui, sans-serif;
+  color: #e9e2f5;
+  letter-spacing: 0.01em;
 }
 
+/* Subtle ambient star-dust */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,0.35), transparent),
+    radial-gradient(1px 1px at 70% 60%, rgba(255,255,255,0.2), transparent),
+    radial-gradient(1.5px 1.5px at 45% 80%, rgba(255,255,255,0.25), transparent),
+    radial-gradient(1px 1px at 85% 15%, rgba(255,255,255,0.2), transparent),
+    radial-gradient(1.5px 1.5px at 10% 75%, rgba(255,255,255,0.3), transparent);
+  background-size: 200px 200px;
+  pointer-events: none;
+  opacity: 0.5;
+  z-index: 0;
+}
+
+/* Glass panel utility */
+.glass {
+  background: rgba(36, 26, 63, 0.55);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  backdrop-filter: blur(12px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+}
+
+.glass-soft {
+  background: rgba(51, 37, 81, 0.35);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Card fly-in (drawn cards overlay) */
+@keyframes card-fly {
+  0% { opacity: 0; transform: translateY(-80px) scale(0.5) rotate(-20deg); }
+  40% { opacity: 1; transform: translateY(0) scale(1.1) rotate(5deg); }
+  70% { transform: translateY(10px) scale(1) rotate(-2deg); }
+  100% { opacity: 0; transform: translateY(60px) scale(0.8) rotate(0deg); }
+}
 .animate-card-fly {
   animation: card-fly 0.8s ease-out forwards;
   opacity: 0;
 }
 
-/* Fade in for toasts */
+/* Toast fade-in */
 @keyframes fade-in {
   from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
-
 .animate-fade-in {
-  animation: fade-in 0.2s ease-out;
+  animation: fade-in 0.25s ease-out;
+}
+
+/* Soft pulse (replaces harsh Tailwind pulse for a chill feel) */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+.animate-soft-pulse {
+  animation: soft-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Gentle floating for accents */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float {
+  animation: float 3.5s ease-in-out infinite;
+}
+
+/* Warm glow (for active turn, UNO button etc) */
+.glow-warm {
+  box-shadow: 0 0 30px -4px rgba(253, 196, 138, 0.5), 0 0 60px -10px rgba(249, 115, 115, 0.3);
+}
+.glow-lotus {
+  box-shadow: 0 0 30px -4px rgba(178, 134, 255, 0.5);
 }

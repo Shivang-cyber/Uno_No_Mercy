@@ -115,6 +115,20 @@ export const useStore = create<Store>((set, get) => ({
         case 'ELIMINATED':
           set({ error: `Player eliminated: ${msg.reason}` })
           break
+
+        case 'ROOM_CLOSED':
+          // Host left (or server closed the room) — clear session, back to lobby screen
+          localStorage.removeItem('rejoinToken')
+          localStorage.removeItem('roomCode')
+          localStorage.removeItem('playerName')
+          set({
+            playerId: null, playerName: null, roomCode: null,
+            gameState: null, hand: [], events: [],
+            showColorPicker: false, showSwapPicker: false,
+            pendingWildCardId: null,
+            error: `Room closed: ${msg.reason}`,
+          })
+          break
       }
     })
 
