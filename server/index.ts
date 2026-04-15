@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { Room } from './Room.js'
 import type { ClientMessage, ServerMessage } from '../shared/types.js'
 
-const PORT = 3001
+const PORT = Number(process.env.PORT) || 3001
 const MAX_ROOMS = 5
 
 const rooms = new Map<string, Room>()
