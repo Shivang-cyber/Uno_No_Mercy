@@ -7,6 +7,11 @@ let handlers: MessageHandler[] = []
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 function getWsUrl(): string {
+  // Production: use VITE_WS_URL env var (e.g. wss://uno-no-mercy-ws.onrender.com)
+  const envUrl = import.meta.env.VITE_WS_URL
+  if (envUrl) return envUrl
+
+  // Local dev fallback: same host, port 3001
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.hostname}:3001`
 }
