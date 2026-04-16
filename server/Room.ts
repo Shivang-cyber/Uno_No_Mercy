@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws'
 import type {
   GameState, Player, ClientMessage, ServerMessage, Color, Card,
 } from '../shared/types.js'
-import { initGame, playCard, handleDraw, handleSwapPick, handleRoulette, getPublicState, callUno, challengeUno } from './engine.js'
+import { initGame, playCard, handleDraw, endTurn, handleSwapPick, handleRoulette, getPublicState, callUno, challengeUno } from './engine.js'
 
 const RECONNECT_TIMEOUT = 120_000 // 2 minutes auto-kick
 
@@ -148,6 +148,7 @@ export class Room {
         rouletteActive: false,
         kickVotes: {},
         kickNeeded: {},
+        awaitingEndTurn: false,
       },
     }
     this.broadcast(msg)
@@ -206,6 +207,13 @@ export class Room {
           this.broadcast({ type: 'EVENT', event: evt })
         }
         this.broadcastState()
+        break
+      }
+
+      case 'END_TURN': {
+        if (!this.state) return
+        const { ok } = endTurn(this.state, conn.playerId)
+        if (ok) this.broadcastState()
         break
       }
 

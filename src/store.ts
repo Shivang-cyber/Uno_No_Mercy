@@ -22,6 +22,7 @@ interface Store {
   startGame: () => void
   playCard: (cardId: string, chosenColor?: Color) => void
   draw: () => void
+  endTurn: () => void
   callUno: () => void
   challengeUno: (targetId: string) => void
   pickSwapTarget: (targetId: string) => void
@@ -179,6 +180,10 @@ export const useStore = create<Store>((set, get) => ({
 
   draw: () => {
     send({ type: 'DRAW' })
+  },
+
+  endTurn: () => {
+    send({ type: 'END_TURN' })
   },
 
   callUno: () => {

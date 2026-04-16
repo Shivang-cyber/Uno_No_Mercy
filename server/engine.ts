@@ -85,9 +85,10 @@ export function initGame(code: string, players: Pick<Player, 'id' | 'name'>[]): 
     winner: null,
     lastAction: null,
     rouletteTargetColor: null,
-    rouletteActive: false, // kept for type compat but no longer used
+    rouletteActive: false,
     pendingSwapPlayerId: null,
     calledUno: new Set<string>(),
+    awaitingEndTurn: false,
   }
 }
 
@@ -228,6 +229,9 @@ export function playCard(
   player.hand.splice(cardIdx, 1)
   state.discard.push(card)
   events.push({ event: 'card_played', playerId, card })
+
+  // Playing a card clears any pending end-turn state
+  state.awaitingEndTurn = false
 
   // Set active color
   if (card.color === 'wild') {
@@ -390,6 +394,9 @@ export function handleDraw(state: GameState, playerId: string): { events: GameEv
     return { events, drawnCards: drawn }
   }
 
+  // Block repeated drawing in the same turn — must play or end turn first
+  if (state.awaitingEndTurn) return { events: [], drawnCards: [] }
+
   let totalDraw: number
 
   if (state.pendingDraw > 0) {
@@ -397,31 +404,33 @@ export function handleDraw(state: GameState, playerId: string): { events: GameEv
     totalDraw = state.pendingDraw
     state.pendingDraw = 0
   } else {
-    // Standard UNO: draw exactly 1 card, turn ends
-    const drawn = drawCards(state, 1)
-    if (drawn.length > 0) {
-      player.hand.push(drawn[0])
-    }
-    events.push({ event: 'cards_drawn', playerId, count: drawn.length })
-    events.push(...checkMercy(state))
-    const winEvt = checkWinner(state)
-    if (winEvt) events.push(winEvt)
-    advanceTurn(state)
-    return { events, drawnCards: drawn }
+    // Draw 1 card — turn stays, player can play or end turn
+    totalDraw = 1
   }
 
-  // Forced draw (from stacking)
   const drawn = drawCards(state, totalDraw)
   player.hand.push(...drawn)
   events.push({ event: 'cards_drawn', playerId, count: drawn.length })
 
-  // Check mercy
   events.push(...checkMercy(state))
   const winEvt = checkWinner(state)
   if (winEvt) events.push(winEvt)
 
-  advanceTurn(state)
+  // Don't advance turn — player may play or explicitly end turn
+  state.awaitingEndTurn = true
+
   return { events, drawnCards: drawn }
+}
+
+// ── End turn after a draw ────────────────────────────────────────
+
+export function endTurn(state: GameState, playerId: string): { ok: boolean } {
+  if (!state.awaitingEndTurn) return { ok: false }
+  const player = currentPlayer(state)
+  if (player.id !== playerId) return { ok: false }
+  state.awaitingEndTurn = false
+  advanceTurn(state)
+  return { ok: true }
 }
 
 // ── Handle 7's Swap pick ─────────────────────────────────────────
@@ -537,5 +546,6 @@ export function getPublicState(state: GameState): import('../shared/types.js').P
     rouletteActive: state.rouletteActive,
     kickVotes: {},
     kickNeeded: {},
+    awaitingEndTurn: state.awaitingEndTurn,
   }
 }

@@ -59,6 +59,9 @@ export interface GameState {
 
   // UNO tracking
   calledUno: Set<string>      // players who have called UNO this turn cycle
+
+  // After drawing, current player may either play a card or end their turn
+  awaitingEndTurn: boolean
 }
 
 // ── Messages: Client → Server ────────────────────────────────────
@@ -70,6 +73,7 @@ export type ClientMessage =
   | { type: 'PLAY'; cardId: string; chosenColor?: Color }
   | { type: 'PLAY_DISCARD_ALL' }  // plays discard-all card (discards matching color cards)
   | { type: 'DRAW' }
+  | { type: 'END_TURN' }  // after drawing, explicitly pass to next player
   | { type: 'CALL_UNO' }
   | { type: 'CHALLENGE_UNO'; targetId: string }
   | { type: 'SWAP_PICK'; targetId: string }  // after playing a 7
@@ -120,6 +124,7 @@ export interface PublicGameState {
   rouletteActive: boolean     // true = current player is in roulette phase
   kickVotes: Record<string, number>  // targetId -> number of votes received
   kickNeeded: Record<string, number> // targetId -> votes needed to kick
+  awaitingEndTurn: boolean    // true = current player drew and must play or end turn
 }
 
 // ── Game Events (for animation / log) ────────────────────────────
