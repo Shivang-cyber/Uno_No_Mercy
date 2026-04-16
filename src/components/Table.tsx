@@ -356,7 +356,7 @@ function Scoreboard({ players, scores, onLogout }: {
 
 export default function Table() {
   const {
-    gameState, hand, playerId, playCard, draw, callUno, challengeUno,
+    gameState, hand, playerId, playCard, draw, endTurn, callUno, challengeUno,
     pickSwapTarget, pickColor, kickVote, sendEmote, logout,
     showColorPicker, showSwapPicker, startGame, error,
   } = useStore()
@@ -570,6 +570,8 @@ export default function Table() {
   const isMyTurn = isPlaying && gameState.turnIndex === myIndex
   const rouletteActive = gameState.rouletteActive ?? false
   const isMyRoulette = isMyTurn && rouletteActive
+  const awaitingEndTurn = gameState.awaitingEndTurn ?? false
+  const iAwaitEndTurn = isMyTurn && awaitingEndTurn
   const unoCallable = gameState.unoCallable ?? []
   const iAmCallable = unoCallable.includes(effectivePlayerId ?? '')
   const recentDiscard = gameState.recentDiscard ?? (gameState.topDiscard ? [gameState.topDiscard] : [])
@@ -806,7 +808,7 @@ export default function Table() {
 
               {/* Center: Draw + Discard */}
               <div className="absolute inset-0 flex items-center justify-center gap-8 sm:gap-12">
-                <button type="button" onClick={draw} disabled={!isMyTurn}
+                <button type="button" onClick={draw} disabled={!isMyTurn || iAwaitEndTurn}
                   className={`
                     relative w-18 h-28 sm:w-22 sm:h-34 rounded-xl shrink-0 [&>img]:rounded-xl
                     ${isMyRoulette ? 'ring-2 ring-red-400 animate-pulse cursor-pointer' :
@@ -859,6 +861,8 @@ export default function Table() {
               <span className="font-display font-black tracking-wide animate-soft-pulse bg-gradient-to-r from-sunset-300 to-lotus-300 bg-clip-text text-transparent">
                 {isMyRoulette
                   ? `Roulette! Draw until you get ${gameState.activeColor?.toUpperCase()}`
+                  : iAwaitEndTurn
+                  ? 'Play a card or end your turn'
                   : 'Your turn'}
               </span>
             ) : (
@@ -866,18 +870,24 @@ export default function Table() {
             )}
           </div>
 
-          {/* Hand + UNO */}
+          {/* Hand + UNO + End Turn */}
           <div className="shrink-0 relative z-30 overflow-visible">
-            {(hand.length <= 2 && hand.length > 0 || iAmCallable) && (
-              <div className="flex justify-center pt-2">
+            <div className="flex justify-center gap-3 pt-2">
+              {(hand.length <= 2 && hand.length > 0 || iAmCallable) && (
                 <button type="button" onClick={callUno}
                   className={`px-8 py-2 rounded-full font-display font-black text-lg tracking-widest shadow-soft transition-all
                     ${iAmCallable ? 'bg-warm-gradient animate-bounce glow-warm' : 'bg-gradient-to-r from-sunset-500 to-sunset-400 hover:scale-105'}
                   `}>
                   UNO!
                 </button>
-              </div>
-            )}
+              )}
+              {iAwaitEndTurn && (
+                <button type="button" onClick={endTurn}
+                  className="px-6 py-2 rounded-full font-display font-bold text-sm tracking-widest shadow-soft bg-gradient-to-r from-lotus-500 to-lotus-400 hover:scale-105 active:scale-95 transition-all animate-soft-pulse">
+                  End Turn →
+                </button>
+              )}
+            </div>
             <Hand cards={hand} onPlay={playCard} isMyTurn={isMyTurn} canPlayCards={canPlayCards} />
           </div>
         </>
