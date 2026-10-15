@@ -1,3 +1,5 @@
+import type { AvatarConfig } from './avatar.js'
+
 // ── Colors & Values ──────────────────────────────────────────────
 
 export type Color = 'red' | 'yellow' | 'green' | 'blue'
@@ -67,8 +69,9 @@ export interface GameState {
 // ── Messages: Client → Server ────────────────────────────────────
 
 export type ClientMessage =
-  | { type: 'JOIN'; code: string; name: string; rejoinToken?: string }
-  | { type: 'CREATE'; name: string }
+  | { type: 'JOIN'; code: string; name: string; rejoinToken?: string; avatar?: AvatarConfig }
+  | { type: 'CREATE'; name: string; avatar?: AvatarConfig }
+  | { type: 'SET_AVATAR'; avatar: AvatarConfig }
   | { type: 'START_GAME' }
   | { type: 'PLAY'; cardId: string; chosenColor?: Color }
   | { type: 'PLAY_DISCARD_ALL' }  // plays discard-all card (discards matching color cards)
@@ -86,6 +89,7 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'ROOM_CREATED'; code: string; playerId: string }
   | { type: 'JOINED'; playerId: string }
+  | { type: 'AVATARS'; avatars: Record<string, AvatarConfig> }  // sent only when someone joins or changes theirs
   | { type: 'STATE'; state: PublicGameState }
   | { type: 'YOUR_HAND'; hand: Card[] }
   | { type: 'EVENT'; event: GameEvent }
@@ -139,7 +143,7 @@ export type GameEvent =
   | { event: 'uno_penalty'; playerId: string; cardsDrawn: number }
   | { event: 'hands_passed'; direction: Direction }
   | { event: 'hands_swapped'; playerId: string; targetId: string }
-  | { event: 'discard_all'; playerId: string; color: Color; count: number }
+  | { event: 'discard_all'; playerId: string; color: Color; count: number; cards: Card[] }
   | { event: 'skip_everyone'; playerId: string; card?: Card }
   | { event: 'roulette'; targetId: string; chosenColor: Color; cardsDrawn: number }
   | { event: 'eliminated'; playerId: string }

@@ -2,6 +2,7 @@ import type { WebSocket } from 'ws'
 import type {
   GameState, Player, ClientMessage, ServerMessage, Color, Card,
 } from '../shared/types.js'
+import { sanitiseAvatar, type AvatarConfig } from '../shared/avatar.js'
 import { initGame, playCard, handleDraw, endTurn, handleSwapPick, handleRoulette, getPublicState, callUno, challengeUno } from './engine.js'
 
 const RECONNECT_TIMEOUT = 120_000 // 2 minutes auto-kick
@@ -18,6 +19,7 @@ export class Room {
   lobby: { id: string; name: string }[] = []
   disconnectTimers: Map<string, NodeJS.Timeout> = new Map()
   kickVotes: Map<string, Set<string>> = new Map() // targetId -> set of voter playerIds
+  avatars: Map<string, AvatarConfig> = new Map()   // kept apart from STATE so photos aren't resent every move
 
   constructor(code: string) {
     this.code = code
@@ -69,7 +71,16 @@ export class Room {
     }
   }
 
-  addPlayer(ws: WebSocket, name: string, rejoinToken?: string): string | null {
+  private setAvatar(playerId: string, name: string, avatar: unknown) {
+    if (avatar === undefined && this.avatars.has(playerId)) return
+    this.avatars.set(playerId, sanitiseAvatar(avatar, name))
+  }
+
+  private broadcastAvatars() {
+    this.broadcast({ type: 'AVATARS', avatars: Object.fromEntries(this.avatars) })
+  }
+
+  addPlayer(ws: WebSocket, name: string, rejoinToken?: string, avatar?: unknown): string | null {
     // Check for rejoin during active game
     if (rejoinToken && this.state) {
       const player = this.state.players.find(p => p.id === rejoinToken)
@@ -81,6 +92,8 @@ export class Room {
         const timer = this.disconnectTimers.get(rejoinToken)
         if (timer) { clearTimeout(timer); this.disconnectTimers.delete(rejoinToken) }
         this.kickVotes.delete(rejoinToken)
+        this.setAvatar(rejoinToken, player.name, avatar)
+        this.broadcastAvatars()
         this.broadcastState()
         return rejoinToken
       }
@@ -95,6 +108,8 @@ export class Room {
         this.connections = this.connections.filter(c => c.playerId !== rejoinToken)
         this.connections.push({ ws, playerId: rejoinToken })
         this.send(ws, { type: 'JOINED', playerId: rejoinToken })
+        this.setAvatar(rejoinToken, name, avatar)
+        this.broadcastAvatars()
         this.broadcastLobby()
         return rejoinToken
       }
@@ -114,6 +129,8 @@ export class Room {
     this.lobby.push({ id: playerId, name })
     this.connections.push({ ws, playerId })
     this.send(ws, { type: 'JOINED', playerId })
+    this.setAvatar(playerId, name, avatar)
+    this.broadcastAvatars()
 
     // Broadcast lobby state
     this.broadcastLobby()
@@ -168,6 +185,14 @@ export class Room {
     if (!conn) return
 
     switch (msg.type) {
+      case 'SET_AVATAR': {
+        const name = this.lobby.find(p => p.id === conn.playerId)?.name
+          ?? this.state?.players.find(p => p.id === conn.playerId)?.name ?? ''
+        this.avatars.set(conn.playerId, sanitiseAvatar(msg.avatar, name))
+        this.broadcastAvatars()
+        break
+      }
+
       case 'START_GAME': {
         if (!this.startGame(conn.playerId)) {
           this.send(ws, { type: 'ERROR', message: 'Cannot start game (need 2+ players, only host can start)' })

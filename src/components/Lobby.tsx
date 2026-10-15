@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import RulesModal, { RulesButton } from './RulesModal'
+import Avatar from '../avatar/Avatar'
+import AvatarEditor from '../avatar/AvatarEditor'
+import { avatarFromSeed } from '../../shared/avatar'
 
 export default function Lobby() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu')
   const [showRules, setShowRules] = useState(false)
-  const { createRoom, joinRoom, error } = useStore()
+  const [showEditor, setShowEditor] = useState(false)
+  const { createRoom, joinRoom, error, myAvatar, setMyAvatar } = useStore()
+  const avatar = myAvatar ?? avatarFromSeed(name.trim() || 'player')
 
   const handleCreate = () => {
     if (name.trim()) createRoom(name.trim())
@@ -50,6 +55,16 @@ export default function Lobby() {
 
         {mode === 'menu' && (
           <div className="space-y-3">
+            <div className="flex items-center gap-4 mb-1">
+              <button type="button" onClick={() => setShowEditor(true)} title="Customise your character"
+                className="w-20 h-20 shrink-0 rounded-full overflow-hidden bg-gradient-to-b from-ink-500 to-ink-700 ring-2 ring-lotus-400/50 hover:ring-lotus-300 transition-all hover:scale-105">
+                <Avatar config={avatar} className="w-full h-full" />
+              </button>
+              <button type="button" onClick={() => setShowEditor(true)}
+                className="flex-1 py-2.5 rounded-xl bg-ink-600/60 hover:bg-ink-500/70 border border-white/10 font-display font-bold text-sm transition-all">
+                {myAvatar ? 'Edit your character' : 'Customise your character'}
+              </button>
+            </div>
             <input
               type="text"
               placeholder="Your nickname"
@@ -130,6 +145,13 @@ export default function Lobby() {
       {/* Rules button + modal */}
       <RulesButton onClick={() => setShowRules(true)} position="bottom-left" />
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+      {showEditor && (
+        <AvatarEditor
+          initial={avatar}
+          onSave={a => { setMyAvatar(a); setShowEditor(false) }}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
     </div>
   )
 }

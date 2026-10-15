@@ -308,7 +308,7 @@ export function playCard(
       const toDiscard = player.hand.filter(c => c.color === color)
       player.hand = player.hand.filter(c => c.color !== color)
       state.discard.push(...toDiscard)
-      events.push({ event: 'discard_all', playerId, color, count: toDiscard.length })
+      events.push({ event: 'discard_all', playerId, color, count: toDiscard.length, cards: toDiscard })
       advanceTurn(state)
       break
     }
