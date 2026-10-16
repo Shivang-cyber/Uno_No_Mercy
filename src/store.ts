@@ -1,6 +1,14 @@
 import { create } from 'zustand'
-import type { PublicGameState, Card, Color, GameEvent } from '../shared/types'
+import type { PublicGameState, Card, Color, GameEvent, RevengeReason, Weapon } from '../shared/types'
 import { connect, send, onMessage } from './lib/socket'
+import type { AvatarConfig } from '../shared/avatar'
+
+function loadMyAvatar(): AvatarConfig | null {
+  try {
+    const raw = localStorage.getItem('avatar')
+    return raw ? JSON.parse(raw) as AvatarConfig : null
+  } catch { return null }
+}
 
 interface Store {
   connected: boolean
@@ -11,6 +19,15 @@ interface Store {
   gameState: PublicGameState | null
   hand: Card[]
   events: GameEvent[]
+  eventLog: { seq: number; event: GameEvent }[]
+  avatars: Record<string, AvatarConfig>
+  myAvatar: AvatarConfig | null
+  setMyAvatar: (avatar: AvatarConfig) => void
+  revengeOffer: { targetId: string; reason: RevengeReason; count?: number; expiresAt: number; ttlMs: number } | null
+  takeRevenge: (weapon: Weapon) => void
+  dismissRevenge: () => void
+  slapstick: boolean
+  toggleSlapstick: () => void
 
   showColorPicker: boolean
   showSwapPicker: boolean
@@ -34,6 +51,8 @@ interface Store {
   init: () => void
 }
 
+let eventSeq = 0
+
 export const useStore = create<Store>((set, get) => ({
   connected: false,
   playerId: null,
@@ -42,6 +61,11 @@ export const useStore = create<Store>((set, get) => ({
   gameState: null,
   hand: [],
   events: [],
+  eventLog: [],
+  avatars: {},
+  myAvatar: loadMyAvatar(),
+  revengeOffer: null,
+  slapstick: (() => { try { return localStorage.getItem('slapstick') !== 'off' } catch { return true } })(),
   showColorPicker: false,
   showSwapPicker: false,
   pendingWildCardId: null,
@@ -76,17 +100,31 @@ export const useStore = create<Store>((set, get) => ({
             const name = localStorage.getItem('playerName')
             if (token && code && name && !get().playerId) {
               set({ playerName: name, roomCode: code })
-              send({ type: 'JOIN', code, name, rejoinToken: token })
+              send({ type: 'JOIN', code, name, rejoinToken: token, avatar: get().myAvatar ?? undefined })
             }
           }
           break
+
+        case 'AVATARS':
+          set({ avatars: msg.avatars })
+          break
+
+        case 'REVENGE_OFFER': {
+          const offer = { targetId: msg.targetId, reason: msg.reason, count: msg.count, ttlMs: msg.ttlMs, expiresAt: Date.now() + msg.ttlMs }
+          set({ revengeOffer: offer })
+          setTimeout(() => { if (get().revengeOffer === offer) set({ revengeOffer: null }) }, msg.ttlMs)
+          break
+        }
 
         case 'YOUR_HAND':
           set({ hand: msg.hand })
           break
 
         case 'EVENT':
-          set(s => ({ events: [...s.events.slice(-50), msg.event] }))
+          set(s => ({
+            events: [...s.events.slice(-50), msg.event],
+            eventLog: [...s.eventLog.slice(-50), { seq: ++eventSeq, event: msg.event }],
+          }))
           break
 
         case 'ERROR':
@@ -124,7 +162,7 @@ export const useStore = create<Store>((set, get) => ({
           localStorage.removeItem('playerName')
           set({
             playerId: null, playerName: null, roomCode: null,
-            gameState: null, hand: [], events: [],
+            gameState: null, hand: [], events: [], eventLog: [], revengeOffer: null,
             showColorPicker: false, showSwapPicker: false,
             pendingWildCardId: null,
             error: `Room closed: ${msg.reason}`,
@@ -143,7 +181,7 @@ export const useStore = create<Store>((set, get) => ({
       // Small delay to ensure socket is connected
       setTimeout(() => {
         if (!get().playerId) {
-          send({ type: 'JOIN', code, name, rejoinToken: token })
+          send({ type: 'JOIN', code, name, rejoinToken: token, avatar: get().myAvatar ?? undefined })
           didAutoRejoin = true
         }
       }, 500)
@@ -153,7 +191,7 @@ export const useStore = create<Store>((set, get) => ({
   createRoom: (name) => {
     set({ playerName: name })
     localStorage.setItem('playerName', name)
-    send({ type: 'CREATE', name })
+    send({ type: 'CREATE', name, avatar: get().myAvatar ?? undefined })
   },
 
   joinRoom: (code, name) => {
@@ -162,7 +200,7 @@ export const useStore = create<Store>((set, get) => ({
     localStorage.setItem('playerName', name)
     localStorage.setItem('roomCode', upper)
     const rejoinToken = localStorage.getItem('rejoinToken') ?? undefined
-    send({ type: 'JOIN', code: upper, name, rejoinToken })
+    send({ type: 'JOIN', code: upper, name, rejoinToken, avatar: get().myAvatar ?? undefined })
   },
 
   startGame: () => {
@@ -209,6 +247,26 @@ export const useStore = create<Store>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
+  takeRevenge: (weapon) => {
+    if (!get().revengeOffer) return
+    set({ revengeOffer: null })
+    send({ type: 'REVENGE', weapon })
+  },
+
+  dismissRevenge: () => set({ revengeOffer: null }),
+
+  toggleSlapstick: () => {
+    const next = !get().slapstick
+    try { localStorage.setItem('slapstick', next ? 'on' : 'off') } catch { /* blocked storage */ }
+    set({ slapstick: next })
+  },
+
+  setMyAvatar: (avatar) => {
+    try { localStorage.setItem('avatar', JSON.stringify(avatar)) } catch { /* storage full or blocked */ }
+    set({ myAvatar: avatar })
+    if (get().playerId) send({ type: 'SET_AVATAR', avatar })
+  },
+
   kickVote: (targetId) => {
     send({ type: 'KICK_VOTE', targetId })
   },
@@ -223,7 +281,7 @@ export const useStore = create<Store>((set, get) => ({
     localStorage.removeItem('playerName')
     set({
       playerId: null, playerName: null, roomCode: null,
-      gameState: null, hand: [], events: [],
+      gameState: null, hand: [], events: [], eventLog: [], revengeOffer: null,
       showColorPicker: false, showSwapPicker: false,
       pendingWildCardId: null, error: null,
     })

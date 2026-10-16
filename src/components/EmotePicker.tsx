@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export const EMOTES = [
   '😂', '🤣', '🤡', '💀', '🔥',
@@ -237,12 +237,16 @@ export function FloatingEmote({
   const left = 50 + r * Math.cos(rad)
   const top = 50 - r * Math.sin(rad)
 
+  // onDone is a fresh function on every table render; keep the latest without restarting the timers
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
+
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('travel'), 250)
     const t2 = setTimeout(() => setPhase('exit'), 2400)
-    const t3 = setTimeout(onDone, 2800)
+    const t3 = setTimeout(() => onDoneRef.current(), 2800)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-  }, [onDone])
+  }, [])
 
   const isGif = emote.startsWith('http')
 

@@ -56,7 +56,7 @@ wss.on('connection', (ws: WebSocket) => {
         rooms.set(code, room)
         currentRoom = room
 
-        const playerId = room.addPlayer(ws, msg.name)
+        const playerId = room.addPlayer(ws, msg.name, undefined, msg.avatar)
         if (playerId) {
           ws.send(JSON.stringify({ type: 'ROOM_CREATED', code, playerId } satisfies ServerMessage))
           console.log(`[room] ${msg.name} created room ${code}`)
@@ -71,7 +71,7 @@ wss.on('connection', (ws: WebSocket) => {
           return
         }
         currentRoom = room
-        const playerId = room.addPlayer(ws, msg.name, msg.rejoinToken)
+        const playerId = room.addPlayer(ws, msg.name, msg.rejoinToken, msg.avatar)
         if (playerId) {
           console.log(`[room] ${msg.name} joined room ${msg.code}`)
         }
