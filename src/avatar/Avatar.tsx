@@ -3,7 +3,7 @@ import type { AvatarConfig, PhotoMood } from '../../shared/avatar'
 
 export type Mood =
   | 'idle' | 'turn' | 'worried' | 'confident'
-  | 'smug' | 'shock' | 'gloom' | 'cry' | 'meh' | 'facepalm' | 'dizzy' | 'ko' | 'celebrate' | 'tantrum'
+  | 'smug' | 'shock' | 'gloom' | 'cry' | 'meh' | 'facepalm' | 'dizzy' | 'ko' | 'celebrate' | 'tantrum' | 'bonked' | 'pied'
 
 // Whole character lives in a 200x300 space; the seat bust is a crop of it.
 const VIEW = { full: '0 0 200 300', bust: '18 14 164 164' }
@@ -102,6 +102,7 @@ function Eye({ a, mood, skin }: { a: AvatarConfig; mood: Mood; skin: string }) {
     case 'celebrate':
       return <path d={`M${x - 7},${y + 3} Q${x},${y - 7} ${x + 7},${y + 3}`} stroke={INK} strokeWidth={3} fill="none" strokeLinecap="round" />
     case 'dizzy':
+    case 'bonked':
       return (
         <g className="av-spin">
           <path d={`M${x},${y} m-1,0 a1,1 0 1,1 2,0 a2.5,2.5 0 1,1 -5,0 a4,4 0 1,1 8,0 a5.5,5.5 0 1,1 -11,0`} stroke={INK} strokeWidth={1.8} fill="none" />
@@ -182,6 +183,7 @@ function Mouth({ a, mood }: { a: AvatarConfig; mood: Mood }) {
     case 'worried':
     case 'facepalm':
     case 'dizzy':
+    case 'bonked':
       return <path d="M88,118 q3,-3 6,0 t6,0 t6,0 t6,0" {...line} strokeWidth={2.4} />
     case 'gloom': return <path d="M89,121 Q100,111 111,121" {...line} />
     case 'cry': return <path d="M88,122 Q100,108 112,122 Z" fill="#5a1f25" />
@@ -312,10 +314,8 @@ function Body({ a, mood, holding }: { a: AvatarConfig; mood: Mood; holding: bool
   return (
     <g className="av-body">
       <ellipse cx={100} cy={289} rx={44} ry={7} fill="rgba(0,0,0,.25)" />
-      <rect x={80} y={210} width={17} height={66} rx={8} fill="#3a3f4b" />
-      <rect x={103} y={210} width={17} height={66} rx={8} fill="#3a3f4b" />
-      <ellipse cx={87} cy={279} rx={12} ry={7} fill="#2a2e37" />
-      <ellipse cx={113} cy={279} rx={12} ry={7} fill="#2a2e37" />
+      <g className="av-leg-l"><rect x={80} y={210} width={17} height={66} rx={8} fill="#3a3f4b" /><ellipse cx={87} cy={279} rx={12} ry={7} fill="#2a2e37" /></g>
+      <g className="av-leg-r"><rect x={103} y={210} width={17} height={66} rx={8} fill="#3a3f4b" /><ellipse cx={113} cy={279} rx={12} ry={7} fill="#2a2e37" /></g>
       <rect x={92} y={134} width={16} height={18} rx={5} fill={a.skin} />
       <path d="M70,150 Q100,140 130,150 L138,216 Q100,224 62,216 Z" fill={a.shirt} />
       <path d="M86,146 Q100,156 114,146" stroke="rgba(0,0,0,.15)" strokeWidth={2.5} fill="none" strokeLinecap="round" />
@@ -357,8 +357,31 @@ function CardFan({ a, count, uid }: { a: AvatarConfig; count: number; uid: strin
 
 // ── Reaction effects ─────────────────────────────────────────────
 
-function Effects({ mood }: { mood: Mood }) {
+function Effects({ mood, skin }: { mood: Mood; skin: string }) {
   switch (mood) {
+    case 'bonked':
+      return (
+        <g>
+          <circle cx={116} cy={30} r={11} fill={skin} />
+          <circle cx={116} cy={30} r={11} fill="#e74c3c" fillOpacity={0.25} />
+          <circle cx={112} cy={26} r={3} fill="#fff" fillOpacity={0.6} />
+          <g className="av-orbit" style={{ transformOrigin: '100px 26px' }}>
+            <path d="M66,26 l3,-7 l3,7 l-7,-4 h8 z" fill="#fdc48a" />
+            <path d="M128,20 l3,-7 l3,7 l-7,-4 h8 z" fill="#fdc48a" />
+            <path d="M98,8 l3,-7 l3,7 l-7,-4 h8 z" fill="#fff6c8" />
+          </g>
+        </g>
+      )
+    case 'pied':
+      return (
+        <g className="av-pie">
+          <path d="M52,78 C50,58 70,52 84,60 C92,48 112,48 120,58 C134,50 152,60 148,80 C156,92 150,108 146,116 C148,130 140,136 136,128 C134,138 124,140 122,130 C114,140 104,138 102,128 C96,140 84,138 84,128 C76,136 64,134 66,122 C54,120 48,104 54,94 C46,90 46,82 52,78 Z"
+            fill="#fffaf0" stroke="#efdcb8" strokeWidth={2} />
+          <circle cx={104} cy={54} r={6} fill="#d6203a" />
+          <path d="M104,48 Q108,40 114,38" stroke="#3a7d2c" strokeWidth={2} fill="none" />
+          <g className="av-blink"><g><ellipse cx={82} cy={92} rx={4} ry={5} fill={INK} /></g><g><ellipse cx={118} cy={92} rx={4} ry={5} fill={INK} /></g></g>
+        </g>
+      )
     case 'tantrum':
       return (
         <g>
@@ -413,12 +436,13 @@ const PHOTO_MOOD: Partial<Record<Mood, PhotoMood>> = {
 // ── Avatar ───────────────────────────────────────────────────────
 
 // Moods where the arms are busy, so the cards go down
-const HANDS_BUSY: Mood[] = ['celebrate', 'tantrum', 'facepalm', 'ko']
+const HANDS_BUSY: Mood[] = ['celebrate', 'tantrum', 'facepalm', 'ko', 'pied']
 
-export default function Avatar({ config: a, mood = 'idle', variant = 'bust', cards = 0, className }: {
+export default function Avatar({ config: a, mood = 'idle', variant = 'bust', cards = 0, walking = false, className }: {
   config: AvatarConfig
   mood?: Mood
   cards?: number
+  walking?: boolean
   variant?: 'bust' | 'full'
   className?: string
 }) {
@@ -433,7 +457,7 @@ export default function Avatar({ config: a, mood = 'idle', variant = 'bust', car
   const blinks = mood === 'idle' || mood === 'turn' || mood === 'confident' || mood === 'worried'
 
   return (
-    <svg viewBox={VIEW[variant]} className={`av av-${mood} ${className ?? ''}`} style={{ overflow: 'visible' }}>
+    <svg viewBox={VIEW[variant]} className={`av av-${mood} ${walking ? 'av-walking' : ''} ${className ?? ''}`} style={{ overflow: 'visible' }}>
       <defs>
         <clipPath id={`head-${uid}`}><HeadShape head={a.head} /></clipPath>
       </defs>
@@ -480,7 +504,7 @@ export default function Avatar({ config: a, mood = 'idle', variant = 'bust', car
               <circle cx={118} cy={102} r={13} fill="rgba(0,0,0,.12)" />
             </g>
           )}
-          <Effects mood={mood} />
+          <Effects mood={mood} skin={a.skin} />
         </g>
         {holding && <CardFan a={a} count={cards} uid={uid} />}
       </g>

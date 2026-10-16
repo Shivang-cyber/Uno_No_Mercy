@@ -66,12 +66,19 @@ export interface GameState {
   awaitingEndTurn: boolean
 }
 
+// ── Friendly violence ───────────────────────────────────────────
+
+export const WEAPONS = ['mallet', 'chicken', 'pie', 'pillow', 'cards'] as const
+export type Weapon = typeof WEAPONS[number]
+export type RevengeReason = 'stack' | 'uno' | 'swap' | 'skip'
+
 // ── Messages: Client → Server ────────────────────────────────────
 
 export type ClientMessage =
   | { type: 'JOIN'; code: string; name: string; rejoinToken?: string; avatar?: AvatarConfig }
   | { type: 'CREATE'; name: string; avatar?: AvatarConfig }
   | { type: 'SET_AVATAR'; avatar: AvatarConfig }
+  | { type: 'REVENGE'; weapon: Weapon }  // spend a revenge pass the server offered
   | { type: 'START_GAME' }
   | { type: 'PLAY'; cardId: string; chosenColor?: Color }
   | { type: 'PLAY_DISCARD_ALL' }  // plays discard-all card (discards matching color cards)
@@ -89,7 +96,8 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'ROOM_CREATED'; code: string; playerId: string }
   | { type: 'JOINED'; playerId: string }
-  | { type: 'AVATARS'; avatars: Record<string, AvatarConfig> }  // sent only when someone joins or changes theirs
+  | { type: 'AVATARS'; avatars: Record<string, AvatarConfig> }
+  | { type: 'REVENGE_OFFER'; targetId: string; reason: RevengeReason; count?: number; ttlMs: number }  // sent only when someone joins or changes theirs
   | { type: 'STATE'; state: PublicGameState }
   | { type: 'YOUR_HAND'; hand: Card[] }
   | { type: 'EVENT'; event: GameEvent }
@@ -149,3 +157,4 @@ export type GameEvent =
   | { event: 'eliminated'; playerId: string }
   | { event: 'player_won'; playerId: string }
   | { event: 'emote'; playerId: string; emote: string }
+  | { event: 'revenge'; attackerId: string; targetId: string; weapon: Weapon }

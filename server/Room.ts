@@ -1,9 +1,12 @@
 import type { WebSocket } from 'ws'
 import type {
-  GameState, Player, ClientMessage, ServerMessage, Color, Card,
+  GameState, Player, ClientMessage, ServerMessage, Color, Card, GameEvent, RevengeReason,
 } from '../shared/types.js'
+import { WEAPONS } from '../shared/types.js'
 import { sanitiseAvatar, type AvatarConfig } from '../shared/avatar.js'
 import { initGame, playCard, handleDraw, endTurn, handleSwapPick, handleRoulette, getPublicState, callUno, challengeUno } from './engine.js'
+
+const DRAW_SIZE: Record<string, number> = { '+2': 2, '+4': 4, 'wild_reverse_+4': 4, 'wild_+6': 6, 'wild_+10': 10 }
 
 const RECONNECT_TIMEOUT = 120_000 // 2 minutes auto-kick
 
@@ -20,6 +23,10 @@ export class Room {
   disconnectTimers: Map<string, NodeJS.Timeout> = new Map()
   kickVotes: Map<string, Set<string>> = new Map() // targetId -> set of voter playerIds
   avatars: Map<string, AvatarConfig> = new Map()   // kept apart from STATE so photos aren't resent every move
+
+  // ── Friendly violence: short-lived revenge passes, granted by the server ──
+  revengePasses: Map<string, { targetId: string; expires: number }> = new Map() // victimId -> pass
+  stackCulprit: { playerId: string; size: number } | null = null              // biggest card on the current draw stack
 
   constructor(code: string) {
     this.code = code
@@ -68,6 +75,25 @@ export class Room {
     // Send each player their private hand
     for (const player of this.state.players) {
       this.sendToPlayer(player.id, { type: 'YOUR_HAND', hand: player.hand })
+    }
+  }
+
+  private offerRevenge(victimId: string, targetId: string, reason: RevengeReason, count?: number) {
+    if (victimId === targetId) return
+    const ttlMs = 6000
+    this.revengePasses.set(victimId, { targetId, expires: Date.now() + ttlMs })
+    this.sendToPlayer(victimId, { type: 'REVENGE_OFFER', targetId, reason, count, ttlMs })
+  }
+
+  // Track who put the biggest card on a draw stack, so the eventual victim knows who to chase
+  private trackStack(events: GameEvent[], pendingBefore: number) {
+    for (const evt of events) {
+      if (evt.event !== 'card_played') continue
+      const size = DRAW_SIZE[evt.card.value] ?? 0
+      if (!size) continue
+      if (pendingBefore === 0 || !this.stackCulprit || size >= this.stackCulprit.size) {
+        this.stackCulprit = { playerId: evt.playerId, size }
+      }
     }
   }
 
@@ -176,6 +202,8 @@ export class Room {
     if (this.lobby[0].id !== playerId) return false // only host can start
 
     this.state = initGame(this.code, this.lobby)
+    this.revengePasses.clear()
+    this.stackCulprit = null
     this.broadcastState()
     return true
   }
@@ -202,6 +230,7 @@ export class Room {
 
       case 'PLAY': {
         if (!this.state) return
+        const pendingBefore = this.state.pendingDraw
         const result = playCard(this.state, conn.playerId, msg.cardId, msg.chosenColor)
         if (!result.ok) {
           this.send(ws, { type: 'ERROR', message: 'Invalid play' })
@@ -209,6 +238,12 @@ export class Room {
         }
         for (const evt of result.events) {
           this.broadcast({ type: 'EVENT', event: evt })
+        }
+        this.trackStack(result.events, pendingBefore)
+        if (result.events.some(e => e.event === 'skip_everyone')) {
+          for (const p of this.state.players) {
+            if (p.id !== conn.playerId && p.hand.length > 0) this.offerRevenge(p.id, conn.playerId, 'skip')
+          }
         }
         if (result.needsColorPick) {
           this.send(ws, { type: 'PICK_COLOR' })
@@ -227,9 +262,14 @@ export class Room {
 
       case 'DRAW': {
         if (!this.state) return
-        const { events, drawnCards } = handleDraw(this.state, conn.playerId)
+        const pendingBefore = this.state.pendingDraw
+        const { events } = handleDraw(this.state, conn.playerId)
         for (const evt of events) {
           this.broadcast({ type: 'EVENT', event: evt })
+        }
+        if (pendingBefore > 0 && events.some(e => e.event === 'cards_drawn')) {
+          if (pendingBefore >= 6 && this.stackCulprit) this.offerRevenge(conn.playerId, this.stackCulprit.playerId, 'stack', pendingBefore)
+          this.stackCulprit = null
         }
         this.broadcastState()
         break
@@ -244,6 +284,9 @@ export class Room {
 
       case 'SWAP_PICK': {
         if (!this.state) return
+        const sizeOf = (id: string) => this.state?.players.find(p => p.id === id)?.hand.length ?? 0
+        const swapperBefore = sizeOf(conn.playerId)
+        const targetBefore = sizeOf(msg.targetId)
         const { ok, events } = handleSwapPick(this.state, conn.playerId, msg.targetId)
         if (!ok) {
           this.send(ws, { type: 'ERROR', message: 'Invalid swap target' })
@@ -252,6 +295,8 @@ export class Room {
         for (const evt of events) {
           this.broadcast({ type: 'EVENT', event: evt })
         }
+        // The swap target ended up with the swapper's (bigger) hand
+        if (swapperBefore > targetBefore) this.offerRevenge(msg.targetId, conn.playerId, 'swap')
         this.broadcastState()
         break
       }
@@ -271,8 +316,17 @@ export class Room {
         const { ok: cOk, events: cEvents } = challengeUno(this.state, conn.playerId, msg.targetId)
         if (cOk) {
           for (const evt of cEvents) this.broadcast({ type: 'EVENT', event: evt })
+          this.offerRevenge(msg.targetId, conn.playerId, 'uno')
           this.broadcastState()
         }
+        break
+      }
+
+      case 'REVENGE': {
+        const pass = this.revengePasses.get(conn.playerId)
+        if (!pass || pass.expires < Date.now() || !WEAPONS.includes(msg.weapon)) return
+        this.revengePasses.delete(conn.playerId)
+        this.broadcast({ type: 'EVENT', event: { event: 'revenge', attackerId: conn.playerId, targetId: pass.targetId, weapon: msg.weapon } })
         break
       }
 

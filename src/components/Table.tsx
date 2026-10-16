@@ -9,7 +9,9 @@ import EmotePicker, { FloatingEmote } from './EmotePicker'
 import Avatar, { type Mood } from '../avatar/Avatar'
 import AvatarEditor from '../avatar/AvatarEditor'
 import { avatarFromSeed, type AvatarConfig } from '../../shared/avatar'
-import { anchor, seat, handCard, flyCard, ripple, shatter, confetti, handArrival, COLOR_HEX, type Point } from '../lib/fx'
+import { anchor, seat, handCard, flyCard, ripple, shatter, confetti, burst, feathers, handArrival, COLOR_HEX, type Point } from '../lib/fx'
+import { RevengePrompt, RevengeScene, WEAPON_SOUND } from './Revenge'
+import type { Weapon } from '../../shared/types'
 
 // ── Direction arrow ──────────────────────────────────────────────
 // A bold arc outside the table circle, sweeping under your seat towards the
@@ -215,11 +217,11 @@ function toOrdinal(n: number): string {
 // ── Player bubble ────────────────────────────────────────────────
 
 function PlayerBubble({
-  name, avatar, mood, moodKey, cardCount, isCurrentTurn, isSelf, connected, isEliminated, finishRank,
+  name, avatar, mood, moodKey, away, cardCount, isCurrentTurn, isSelf, connected, isEliminated, finishRank,
   isCallable, onChallenge, showSwapButton, onSwapPick,
   onKick, kickInfo,
 }: {
-  name: string; avatar: AvatarConfig; mood: Mood; moodKey?: number
+  name: string; avatar: AvatarConfig; mood: Mood; moodKey?: number; away?: boolean
   cardCount: number; isCurrentTurn: boolean; isSelf: boolean
   connected: boolean; isEliminated: boolean; finishRank: number | null; isCallable: boolean
   onChallenge?: () => void; showSwapButton?: boolean; onSwapPick?: () => void
@@ -246,7 +248,9 @@ function PlayerBubble({
             ${isEliminated ? 'opacity-50' : ''}
           `}
         >
-          <Avatar key={moodKey} config={avatar} mood={mood} cards={isEliminated || finished ? 0 : cardCount} className="w-full h-full" />
+          <div className={`w-full h-full transition-opacity duration-200 ${away ? 'opacity-0' : ''}`}>
+            <Avatar key={moodKey} config={avatar} mood={mood} cards={isEliminated || finished ? 0 : cardCount} className="w-full h-full" />
+          </div>
         </div>
         {/* Card count */}
         {!finished && !isEliminated && (
@@ -364,6 +368,7 @@ export default function Table() {
     gameState, hand, playerId, playCard, draw, endTurn, callUno, challengeUno,
     pickSwapTarget, pickColor, kickVote, sendEmote, logout,
     showColorPicker, showSwapPicker, startGame, error, avatars, myAvatar, setMyAvatar,
+    revengeOffer, takeRevenge, dismissRevenge, slapstick, toggleSlapstick,
   } = useStore()
 
   const [toast, setToast] = useState<{ big: string; small: string; key: number } | null>(null)
@@ -378,6 +383,9 @@ export default function Table() {
   const [activeEmotes, setActiveEmotes] = useState<{ id: number; emote: string; fromAngle: number; toAngle: number }[]>([])
   const eventLog = useStore(s => s.eventLog)
   const [showEditor, setShowEditor] = useState(false)
+  const [revengeQueue, setRevengeQueue] = useState<{ id: number; attackerId: string; targetId: string; weapon: Weapon }[]>([])
+  const slapstickRef = useRef(slapstick)
+  slapstickRef.current = slapstick
 
   // ── Character reactions: short mood sequences per player ──
   const [reactions, setReactions] = useState<Record<string, { mood: Mood; key: number }>>({})
@@ -594,6 +602,17 @@ export default function Table() {
           break
         }
 
+        case 'revenge': {
+          if (slapstickRef.current) {
+            // One scene at a time; drop extras if a skip-everyone sets off a stampede
+            setRevengeQueue(q => q.length >= 4 ? q : [...q, { id: Math.random(), attackerId: ev.attackerId, targetId: ev.targetId, weapon: ev.weapon }])
+          } else {
+            const nameOf = (id: string) => gs.players.find(p => p.id === id)?.name ?? '?'
+            setToast({ big: WEAPON_SOUND[ev.weapon], small: `${nameOf(ev.attackerId)} got revenge on ${nameOf(ev.targetId)}`, key: Math.random() })
+          }
+          break
+        }
+
         case 'uno_called': {
           react(ev.playerId, [['confident', 1500]], 2)
           break
@@ -627,6 +646,38 @@ export default function Table() {
       }
     }
   }, [eventLog, react])
+
+  const currentRevenge = revengeQueue[0]
+  const onRevengeImpact = useCallback((to: Point, hand: Point) => {
+    const r = revengeQueue[0]
+    if (!r) return
+    const colour: Record<Weapon, string> = { mallet: '#ff8fb1', chicken: '#ffd23f', pie: '#fffaf0', pillow: '#c9b8ff', cards: '#fc9d7c' }
+    burst(to, WEAPON_SOUND[r.weapon], colour[r.weapon])
+    const seatEl = document.querySelector(`[data-seat="${CSS.escape(r.targetId)}"]`)
+    seatEl?.animate(
+      r.weapon === 'mallet'
+        ? [{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(1.15,.75)' }, { transform: 'translate(-50%,-50%) scale(1)' }]
+        : [{ transform: 'translate(-50%,-50%)' }, { transform: 'translate(calc(-50% + 10px),-50%) rotate(6deg)' }, { transform: 'translate(calc(-50% - 8px),-50%) rotate(-4deg)' }, { transform: 'translate(-50%,-50%)' }],
+      { duration: 420, easing: 'ease-out' },
+    )
+    switch (r.weapon) {
+      case 'mallet': react(r.targetId, [['bonked', 2400]], 5); break
+      case 'chicken': react(r.targetId, [['dizzy', 1900]], 5); break
+      case 'pie': react(r.targetId, [['pied', 3000]], 5); break
+      case 'pillow': react(r.targetId, [['dizzy', 1500]], 5); feathers(to); break
+      case 'cards':
+        for (let i = 0; i < 9; i++) {
+          flyCard({ from: hand, to: { x: to.x + (Math.random() - 0.5) * 60, y: to.y + (Math.random() - 0.5) * 40 }, fromScale: 0.4, toScale: 0.45, delay: i * 35, duration: 320, lift: 20, landSpin: (Math.random() - 0.5) * 360 })
+        }
+        react(r.targetId, [['shock', 600], ['gloom', 1200]], 5)
+        break
+    }
+  }, [revengeQueue, react])
+  const onRevengeDone = useCallback(() => {
+    const r = revengeQueue[0]
+    if (r) react(r.attackerId, [['smug', 1500]], 2)
+    setRevengeQueue(q => q.slice(1))
+  }, [revengeQueue, react])
 
   // "Your turn" banner when the turn comes round to me
   const myTurnNow = !!gameState && gameState.phase === 'playing' && gameState.players[gameState.turnIndex]?.id === playerId
@@ -723,6 +774,28 @@ export default function Table() {
       {passAnim && <PassAnimation direction={passAnim.direction} onDone={clearPassAnim} />}
       {swapAnim && <SwapAnimation p1={swapAnim.p1} p2={swapAnim.p2} onDone={clearSwapAnim} />}
       {showColorPicker && <ColorPicker onPick={pickColor} />}
+      {currentRevenge && (
+        <RevengeScene
+          key={currentRevenge.id}
+          attackerId={currentRevenge.attackerId}
+          targetId={currentRevenge.targetId}
+          weapon={currentRevenge.weapon}
+          attacker={avatarOf(currentRevenge.attackerId, gameState.players.find(p => p.id === currentRevenge.attackerId)?.name ?? '')}
+          onImpact={onRevengeImpact}
+          onDone={onRevengeDone}
+        />
+      )}
+      {revengeOffer && isPlaying && (
+        <RevengePrompt
+          targetName={gameState.players.find(p => p.id === revengeOffer.targetId)?.name ?? '?'}
+          reason={revengeOffer.reason}
+          count={revengeOffer.count}
+          expiresAt={revengeOffer.expiresAt}
+          ttlMs={revengeOffer.ttlMs}
+          onPick={takeRevenge}
+          onDismiss={dismissRevenge}
+        />
+      )}
       {showEditor && (
         <AvatarEditor
           initial={myAvatar ?? avatarOf(effectivePlayerId ?? '', myPlayer?.name ?? '')}
@@ -783,6 +856,11 @@ export default function Table() {
             <span key={gameState.pendingDraw} className="px-2 py-0.5 rounded text-xs font-bold bg-red-600 animate-pop">+{gameState.pendingDraw}</span>
           )}
           <span className="text-xs text-gray-400">Deck: {gameState.deckCount}</span>
+          <button type="button" onClick={toggleSlapstick}
+            title="Show or hide revenge animations on your screen"
+            className={`ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all ${slapstick ? 'bg-sunset-500/20 border-sunset-400/40 text-sunset-200' : 'bg-ink-700/60 border-white/10 text-lotus-300/60'}`}>
+            Slapstick {slapstick ? 'on' : 'off'}
+          </button>
         </div>
       </div>
 
@@ -938,6 +1016,7 @@ export default function Table() {
                       avatar={avatarOf(p.id, p.name)}
                       mood={moodOf(p, gameState.turnIndex === p.originalIndex)}
                       moodKey={reactions[p.id]?.key}
+                      away={currentRevenge?.attackerId === p.id}
                       isCurrentTurn={gameState.turnIndex === p.originalIndex}
                       isSelf={false} connected={p.connected} isEliminated={p.isEliminated}
                       finishRank={p.finishRank ?? null}
@@ -993,6 +1072,7 @@ export default function Table() {
                       avatar={avatarOf(myPlayer.id, myPlayer.name)}
                       mood={moodOf({ ...myPlayer, cardCount: hand.length }, isMyTurn)}
                       moodKey={reactions[myPlayer.id]?.key}
+                      away={currentRevenge?.attackerId === myPlayer.id}
                       cardCount={hand.length}
                       isCurrentTurn={isMyTurn}
                       isSelf={true}

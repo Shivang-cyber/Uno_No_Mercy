@@ -217,3 +217,23 @@ body::before {
 .animate-rise {
   animation: rise .35s ease-out;
 }
+
+/* Friendly violence: walking, bonked, pied */
+.av .av-leg-l, .av .av-leg-r { transform-box: view-box; }
+.av .av-leg-l { transform-origin: 88px 212px; }
+.av .av-leg-r { transform-origin: 112px 212px; }
+.av-walking .av-leg-l { animation: av-step .32s ease-in-out infinite alternate; }
+.av-walking .av-leg-r { animation: av-step .32s ease-in-out infinite alternate-reverse; }
+.av-walking .av-all { animation: av-walk-bob .16s ease-in-out infinite alternate; }
+@keyframes av-step { from { transform: rotate(-20deg); } to { transform: rotate(20deg); } }
+@keyframes av-walk-bob { from { transform: translateY(0); } to { transform: translateY(-5px); } }
+@keyframes av-squash {
+  0% { transform: scaleY(1); }
+  12% { transform: scaleY(.62) scaleX(1.18); }
+  40% { transform: scaleY(1.08) scaleX(.96); }
+  60%, 100% { transform: scaleY(.94) scaleX(1.03); }
+}
+.av-bonked .av-head { animation: av-squash 1.2s cubic-bezier(.2,.8,.3,1) forwards; }
+.av-bonked .av-all { animation: av-jolt .6s ease-out; }
+@keyframes av-pie-in { 0% { transform: scale(1.5); opacity: 0; } 30% { transform: scale(.95); opacity: 1; } 100% { transform: scale(1); } }
+.av .av-pie { transform-box: fill-box; transform-origin: center; animation: av-pie-in .5s ease-out both; }

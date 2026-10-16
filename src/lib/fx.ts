@@ -196,3 +196,53 @@ export function confetti() {
     ).finished.then(() => piece.remove(), () => piece.remove())
   }
 }
+
+// ── Comic burst ("BONK!") at a point ─────────────────────────────
+
+export function burst(at: Point, text: string, colour = '#ffd23f') {
+  const el = document.createElement('div')
+  const size = 150
+  const spikes = 12
+  const pts = Array.from({ length: spikes * 2 }, (_, i) => {
+    const r = i % 2 === 0 ? 48 : 30
+    const a = (Math.PI * i) / spikes
+    return `${50 + r * Math.cos(a)},${50 + r * Math.sin(a)}`
+  }).join(' ')
+  el.style.cssText = `position:absolute;left:${at.x - size / 2}px;top:${at.y - size / 2 - 50}px;width:${size}px;height:${size}px;z-index:75`
+  el.innerHTML = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" style="overflow:visible">
+    <polygon points="${pts}" fill="${colour}" stroke="#1a1426" stroke-width="3" stroke-linejoin="round"/>
+    <text x="50" y="57" text-anchor="middle" font-family="Outfit, sans-serif" font-weight="900" font-size="19" fill="#1a1426" transform="rotate(-8 50 50)">${text}</text>
+  </svg>`
+  getLayer().appendChild(el)
+  el.animate(
+    [
+      { transform: 'scale(.2) rotate(-20deg)', opacity: 0 },
+      { transform: 'scale(1.15) rotate(4deg)', opacity: 1, offset: 0.18 },
+      { transform: 'scale(1) rotate(0)', opacity: 1, offset: 0.3 },
+      { transform: 'scale(1) rotate(0)', opacity: 1, offset: 0.8 },
+      { transform: 'scale(1.1) rotate(0)', opacity: 0 },
+    ],
+    { duration: 1300, easing: 'ease-out', fill: 'both' },
+  ).finished.then(() => el.remove(), () => el.remove())
+}
+
+// ── Feathers drifting down (pillow fight) ────────────────────────
+
+export function feathers(at: Point) {
+  for (let i = 0; i < 12; i++) {
+    const f = document.createElement('div')
+    const w = 8 + Math.random() * 6
+    f.style.cssText = `position:absolute;left:${at.x}px;top:${at.y - 20}px;width:${w}px;height:${w * 2.2}px;background:#fff;border-radius:50% 50% 50% 50% / 70% 70% 30% 30%;box-shadow:0 0 4px rgba(0,0,0,.2)`
+    getLayer().appendChild(f)
+    const dx = (Math.random() - 0.5) * 180
+    const sway = (Math.random() - 0.5) * 60
+    f.animate(
+      [
+        { transform: 'translate(0,0) rotate(0)', opacity: 1 },
+        { transform: `translate(${dx * 0.5 + sway}px, ${-30 - Math.random() * 40}px) rotate(${Math.random() * 180}deg)`, opacity: 1, offset: 0.25 },
+        { transform: `translate(${dx - sway}px, ${60 + Math.random() * 60}px) rotate(${Math.random() * 360}deg)`, opacity: 0 },
+      ],
+      { duration: 1800 + Math.random() * 900, easing: 'ease-out', fill: 'both' },
+    ).finished.then(() => f.remove(), () => f.remove())
+  }
+}
